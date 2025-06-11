@@ -61,8 +61,8 @@ files["programs/jarvis"] = [[
 -- An LLM-powered assistant for ComputerCraft.
 
 -- Load modules
-local llm = require("lib.jarvis.llm")
-local tools = require("lib.jarvis.tools")
+local llm = require("jarvis.llm")
+local tools = require("jarvis.tools")
 
 -- Load config
 local CONFIG_PATH_LUA = "etc.jarvis.config"
