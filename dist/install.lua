@@ -4,7 +4,58 @@
 local files = {}
 
 -- Packed files will be inserted here by the build script.
-files["programs/jarvis"] = [=[
+files["lib/jarvis/tools.lua"] = [[
+-- tools.lua
+-- Defines the functions that the LLM can call.
+
+local Tools = {}
+
+-- A registry to hold the function definitions and their callable implementations.
+local registry = {}
+
+-- Tool Definition: get_time
+-- This function gets the current in-game time.
+function Tools.get_time()
+    return { time = textutils.formatTime(os.time("ingame"), false) }
+end
+
+-- Register the get_time tool with its implementation and schema for the LLM.
+registry.get_time = {
+    func = Tools.get_time,
+    schema = {
+        type = "function",
+        function = {
+            name = "get_time",
+            description = "Get the current in-game time.",
+            parameters = {
+                type = "object",
+                properties = {},
+                required = {},
+            },
+        },
+    },
+}
+
+
+-- Function to get all tool schemas to send to the LLM.
+function Tools.get_all_schemas()
+    local schemas = {}
+    for name, tool in pairs(registry) do
+        table.insert(schemas, tool.schema)
+    end
+    return schemas
+end
+
+-- Function to get a tool's implementation by name.
+function Tools.get_tool(name)
+    if registry[name] then
+        return registry[name].func
+    end
+    return nil
+end
+
+return Tools 
+]]\nfiles["programs/jarvis"] = [[
 -- Jarvis: Main Program
 -- An LLM-powered assistant for ComputerCraft.
 
@@ -18,23 +69,23 @@ local CONFIG_PATH_FS = "/etc/jarvis/config.lua"
 
 local ok, config = pcall(require, CONFIG_PATH_LUA)
 if not ok then
-    local err_msg = ([[
-Could not load config from '%s'.
-Please create this file and add your OpenAI API key.
-
-Example to paste into the new file:
---------------------------------------------------
-local config = {}
-
--- Your OpenAI API key from https://platform.openai.com/api-keys
-config.openai_api_key = "YOUR_API_KEY_HERE"
-
--- The model to use. "gpt-4o" is a good default.
-config.model = "gpt-4o"
-
-return config
---------------------------------------------------
-]]):format(CONFIG_PATH_FS)
+    local err_msg = table.concat({
+        "Could not load config from '" .. CONFIG_PATH_FS .. "'.",
+        "Please create this file and add your OpenAI API key.",
+        "",
+        "Example to paste into the new file:",
+        "--------------------------------------------------",
+        "local config = {}",
+        "",
+        '-- Your OpenAI API key from https://platform.openai.com/api-keys',
+        'config.openai_api_key = "YOUR_API_KEY_HERE"',
+        "",
+        '-- The model to use. "gpt-4o" is a good default.',
+        'config.model = "gpt-4o"',
+        "",
+        "return config",
+        "--------------------------------------------------"
+    }, "\\n")
     error(err_msg, 0)
 end
 
@@ -139,58 +190,7 @@ local function main()
 end
 
 main() 
-]=]\nfiles["lib/jarvis/lib/jarvis/tools.lua"] = [[
--- tools.lua
--- Defines the functions that the LLM can call.
-
-local Tools = {}
-
--- A registry to hold the function definitions and their callable implementations.
-local registry = {}
-
--- Tool Definition: get_time
--- This function gets the current in-game time.
-function Tools.get_time()
-    return { time = textutils.formatTime(os.time("ingame"), false) }
-end
-
--- Register the get_time tool with its implementation and schema for the LLM.
-registry.get_time = {
-    func = Tools.get_time,
-    schema = {
-        type = "function",
-        function = {
-            name = "get_time",
-            description = "Get the current in-game time.",
-            parameters = {
-                type = "object",
-                properties = {},
-                required = {},
-            },
-        },
-    },
-}
-
-
--- Function to get all tool schemas to send to the LLM.
-function Tools.get_all_schemas()
-    local schemas = {}
-    for name, tool in pairs(registry) do
-        table.insert(schemas, tool.schema)
-    end
-    return schemas
-end
-
--- Function to get a tool's implementation by name.
-function Tools.get_tool(name)
-    if registry[name] then
-        return registry[name].func
-    end
-    return nil
-end
-
-return Tools 
-]]\nfiles["lib/jarvis/lib/jarvis/llm.lua"] = [[
+]]\nfiles["lib/jarvis/llm.lua"] = [[
 -- llm.lua
 -- Handles communication with the OpenAI API.
 
