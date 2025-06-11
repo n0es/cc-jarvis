@@ -3,7 +3,7 @@
 
 local LLM = {}
 
-local API_URL = "https://api.openai.com/v1/chat/completions"
+local API_URL = "https://api.openai.com/v1/responses"
 
 -- Test basic connectivity to OpenAI
 function LLM.test_openai_connectivity()

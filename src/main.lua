@@ -93,7 +93,7 @@ local function main()
     print("Current bot name: " .. tools.get_bot_name())
 
     local messages = {
-        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Only respond when someone addresses you by name." }
+        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
     }
     -- Comment out tools for now to focus on basic chat
     -- local tool_schemas = tools.get_all_schemas()
