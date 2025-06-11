@@ -15,7 +15,7 @@ local function main()
     while true do
         -- Wait for a chat message event from the chat box.
         -- This event is specific to the Advanced Peripherals mod.
-        local event, player, message, uuid = os.pullEvent("chat_message")
+        local event, player, message, uuid = os.pullEvent("chat")
 
         -- Send a static response back to the player who sent the message.
         local response = "Hello, " .. player .. "! This is a static reply from Jarvis."
