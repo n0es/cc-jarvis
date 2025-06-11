@@ -29,8 +29,8 @@ else
         '-- Your OpenAI API key from https://platform.openai.com/api-keys',
         'config.openai_api_key = "YOUR_API_KEY_HERE"',
         "",
-        '-- The model to use. "gpt-4o" is a good default.',
-        'config.model = "gpt-4o"',
+        '-- The model to use. "gpt-4.1" is a good default for the new API.',
+        'config.model = "gpt-4.1"',
         "",
         "return config",
         "--------------------------------------------------"
@@ -42,44 +42,54 @@ if not config.openai_api_key or config.openai_api_key == "YOUR_API_KEY_HERE" the
     error("API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
 end
 
-
-local function process_llm_response(response_data)
-    local message = response_data.choices[1].message
-    local finish_reason = response_data.choices[1].finish_reason
-
-    if finish_reason == "tool_calls" then
-        -- The model wants to call one or more tools.
-        local tool_calls = message.tool_calls
-        local tool_outputs = {}
-
-        for _, tool_call in ipairs(tool_calls) do
-            local func_name = tool_call["function"]["name"]
-            local func_args_json = tool_call["function"]["arguments"]
-            
-            print("LLM wants to call tool: " .. func_name)
-            local tool_func = tools.get_tool(func_name)
-
-            if tool_func then
-                local args = nil
-                if func_args_json and func_args_json ~= "" and func_args_json ~= "{}" then
-                    args = textutils.unserialiseJSON(func_args_json)
-                end
-                
-                local result = tool_func(args)
-                
-                table.insert(tool_outputs, {
-                    tool_call_id = tool_call.id,
-                    role = "tool",
-                    name = func_name,
-                    content = textutils.serialiseJSON(result),
-                })
+-- Extract response content from the new API format
+local function extract_response_content(response_data)
+    -- The new API format might return content differently
+    -- Try multiple possible response structures
+    if response_data.content then
+        if type(response_data.content) == "table" and #response_data.content > 0 then
+            -- Content is an array of content objects
+            local content_obj = response_data.content[1]
+            if content_obj.text then
+                return content_obj.text
+            elseif content_obj.content then
+                return content_obj.content
+            end
+        elseif type(response_data.content) == "string" then
+            return response_data.content
+        end
+    end
+    
+    -- Fallback to standard OpenAI format if available
+    if response_data.choices and #response_data.choices > 0 then
+        local choice = response_data.choices[1]
+        if choice.message and choice.message.content then
+            return choice.message.content
+        end
+    end
+    
+    -- Another possible structure for the new API
+    if response_data.output and response_data.output.content then
+        if type(response_data.output.content) == "table" and #response_data.output.content > 0 then
+            local content_obj = response_data.output.content[1]
+            if content_obj.text then
+                return content_obj.text
             end
         end
-        return tool_outputs
     end
+    
+    return nil
+end
 
-    -- If it's not a tool call, it's a regular message for the user.
-    return message.content
+local function process_llm_response(response_data)
+    -- Try to extract content using the new format
+    local content = extract_response_content(response_data)
+    if content then
+        return content
+    end
+    
+    -- If we can't extract content, return an error message
+    return "I received a response but couldn't parse it properly."
 end
 
 
@@ -118,8 +128,8 @@ local function main()
                 goto continue
             end
 
-            -- Simplified response handling (no tools for now)
-            local result = response.choices[1].message.content
+            -- Process response using the new format
+            local result = process_llm_response(response)
             chatBox.sendMessage(result, bot_name, "<>")
             table.insert(messages, { role = "assistant", content = result })
 

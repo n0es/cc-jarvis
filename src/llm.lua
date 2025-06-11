@@ -36,6 +36,32 @@ function LLM.test_openai_connectivity()
     end
 end
 
+-- Convert standard OpenAI messages format to the new input format
+local function convert_messages_to_input(messages)
+    local input = {}
+    
+    for _, message in ipairs(messages) do
+        local converted_message = {
+            role = message.role,
+            content = {
+                {
+                    type = message.role == "assistant" and "output_text" or "input_text",
+                    text = message.content
+                }
+            }
+        }
+        
+        -- Add id for assistant messages (required by the new format)
+        if message.role == "assistant" then
+            converted_message.id = "msg_" .. tostring(os.epoch("utc")) .. math.random(100000, 999999)
+        end
+        
+        table.insert(input, converted_message)
+    end
+    
+    return input
+end
+
 function LLM.request(api_key, model, messages, tools)
     print("[DEBUG] Starting LLM request...")
     print("[DEBUG] Target URL: " .. API_URL)
@@ -57,29 +83,33 @@ function LLM.request(api_key, model, messages, tools)
     
     print("[DEBUG] Model: " .. tostring(model))
     print("[DEBUG] Messages count: " .. #messages)
-    -- print("[DEBUG] Tools count: " .. (tools and #tools or 0))
     
-    -- Use exact same headers as working GPT.lua example
+    -- Use exact same headers as working curl example
     local headers = {
         ["Authorization"] = "Bearer " .. api_key,
         ["Content-Type"] = "application/json"
     }
-    print("[DEBUG] Headers prepared (matching GPT.lua format)")
+    print("[DEBUG] Headers prepared (matching curl format)")
 
-    -- Simplified body - just like GPT.lua example (no tools for now)
+    -- Convert messages to the new input format
+    local input = convert_messages_to_input(messages)
+    
+    -- Build body matching the working curl example
     local body = {
         model = model,
-        messages = messages,
+        input = input,
+        text = {
+            format = {
+                type = "text"
+            }
+        },
+        reasoning = {},
+        tools = tools or {},
+        temperature = 1,
+        max_output_tokens = 2048,
+        top_p = 1,
+        store = true
     }
-
-    -- Comment out tools for now to match working GPT.lua exactly
-    --[[
-    if tools and #tools > 0 then
-        body.tools = tools
-        body.tool_choice = "auto"
-        print("[DEBUG] Tools added to request")
-    end
-    --]]
 
     print("[DEBUG] Serializing request body...")
     -- Use the same serialization as working GPT.lua example
@@ -97,7 +127,7 @@ function LLM.request(api_key, model, messages, tools)
     -- Show first 200 chars of request for debugging
     print("[DEBUG] Request preview: " .. body_json:sub(1, 200) .. (#body_json > 200 and "..." or ""))
     
-    print("[DEBUG] Making async HTTP request (matching GPT.lua pattern)...")
+    print("[DEBUG] Making async HTTP request (matching curl pattern)...")
     
     -- Use exact same pattern as working GPT.lua example
     http.request(API_URL, body_json, headers)
