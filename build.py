@@ -60,6 +60,40 @@ INSTALLER_TEMPLATE = textwrap.dedent("""
             file.close()
         end
         
+        -- Create placeholder config file if it doesn't exist
+        local config_path = "/etc/jarvis/config.lua"
+        if not fs.exists(config_path) then
+            print("Creating placeholder config file at " .. config_path)
+            local config_dir = "/etc/jarvis"
+            if not fs.exists(config_dir) then
+                fs.makeDir(config_dir)
+            end
+            
+            local config_content = [[-- Configuration for Jarvis
+local config = {}
+
+-- Your OpenAI API key from https://platform.openai.com/api-keys
+-- Replace YOUR_API_KEY_HERE with your actual API key
+config.openai_api_key = "YOUR_API_KEY_HERE"
+
+-- The model to use. "gpt-4o" is a good default.
+config.model = "gpt-4o"
+
+return config
+]]
+            
+            local config_file = fs.open(config_path, "w")
+            if config_file then
+                config_file.write(config_content)
+                config_file.close()
+                print("Placeholder config created. Edit " .. config_path .. " and add your API key.")
+            else
+                printError("Failed to create config file at " .. config_path)
+            end
+        else
+            print("Config file already exists at " .. config_path)
+        end
+        
         local startup_path = "startup.lua"
         local program_to_run = "{program_to_run}"
         
@@ -82,6 +116,7 @@ INSTALLER_TEMPLATE = textwrap.dedent("""
         print([[
 
     Installation complete!
+    IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
     Reboot the computer to start Jarvis automatically.
     Or, to run Jarvis now, execute: '{program_to_run}'
     ]])
