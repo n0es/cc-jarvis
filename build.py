@@ -156,7 +156,7 @@ def main():
         return
 
     installer_content = INSTALLER_TEMPLATE.format(
-        packed_files='\\n'.join(packed_files_lua),
+        packed_files='\n'.join(packed_files_lua),
         program_to_run=program_to_run_on_cc,
         lib_dir=LIB_DIR_ON_CC
     )
