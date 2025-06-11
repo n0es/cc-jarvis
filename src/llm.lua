@@ -111,19 +111,16 @@ function LLM.request(api_key, model, messages, tools)
         store = true
     }
     
-    -- Ensure tools is an empty array, not an empty object (fixes bad request)
-    if not tools or #tools == 0 then
-        -- Create a proper empty array structure
-        body.tools = {}
-        -- Add a dummy element and remove it to force array serialization
-        table.insert(body.tools, "dummy")
-        table.remove(body.tools, 1)
-    end
+
 
     print("[DEBUG] Serializing request body...")
     -- Use the same serialization as working GPT.lua example
     local body_json = textutils.serializeJSON(body)
     print("[DEBUG] Used serializeJSON (matching GPT.lua)")
+    
+    -- Fix the tools field to be an empty array instead of empty object
+    body_json = body_json:gsub('"tools":{}', '"tools":[]')
+    print("[DEBUG] Fixed tools field to be empty array")
     
     print("[DEBUG] Request body serialized successfully")
     print("[DEBUG] Request size: " .. #body_json .. " bytes")
