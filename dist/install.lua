@@ -4,7 +4,8 @@
 local files = {}
 
 -- Packed files will be inserted here by the build script.
-files["programs/jarvis"] = [[-- Jarvis: Main Program
+files["programs/jarvis"] = [=[
+-- Jarvis: Main Program
 -- An LLM-powered assistant for ComputerCraft.
 
 -- Load modules
@@ -33,7 +34,7 @@ config.model = "gpt-4o"
 
 return config
 --------------------------------------------------
-]].."]]"..[[):format(CONFIG_PATH_FS)
+]]):format(CONFIG_PATH_FS)
     error(err_msg, 0)
 end
 
@@ -137,7 +138,9 @@ local function main()
     end
 end
 
-main() ]]\nfiles["lib/jarvis/lib/jarvis/tools.lua"] = [[-- tools.lua
+main() 
+]=]\nfiles["lib/jarvis/lib/jarvis/tools.lua"] = [[
+-- tools.lua
 -- Defines the functions that the LLM can call.
 
 local Tools = {}
@@ -186,7 +189,9 @@ function Tools.get_tool(name)
     return nil
 end
 
-return Tools ]]\nfiles["lib/jarvis/lib/jarvis/llm.lua"] = [[-- llm.lua
+return Tools 
+]]\nfiles["lib/jarvis/lib/jarvis/llm.lua"] = [[
+-- llm.lua
 -- Handles communication with the OpenAI API.
 
 local LLM = {}
@@ -235,7 +240,8 @@ function LLM.request(api_key, model, messages, tools)
     return true, response_data
 end
 
-return LLM ]]
+return LLM 
+]]
 
 local function install()
     print("Removing old version if it exists...")
