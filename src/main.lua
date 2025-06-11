@@ -95,7 +95,8 @@ local function main()
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Only respond when someone addresses you by name." }
     }
-    local tool_schemas = tools.get_all_schemas()
+    -- Comment out tools for now to focus on basic chat
+    -- local tool_schemas = tools.get_all_schemas()
 
     while true do
         local _, player, message_text = os.pullEvent("chat")
@@ -106,17 +107,24 @@ local function main()
             print(player .. " says: " .. message_text)
             table.insert(messages, { role = "user", content = message_text })
 
-            -- Call the LLM 
-            chatBox.sendMessage("Thinking...", bot_name)
-            local ok, response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
+            -- Call the LLM (without tools for now)
+            chatBox.sendMessage("Thinking...", bot_name, "<>")
+            local ok, response = llm.request(config.openai_api_key, config.model, messages) -- removed tool_schemas parameter
 
             if not ok then
                 printError("LLM Request Failed: " .. tostring(response))
-                chatBox.sendMessage("Sorry, I encountered an error.", bot_name)
+                chatBox.sendMessage("Sorry, I encountered an error.", bot_name, "<>")
                 table.remove(messages) -- Remove the failed user message
                 goto continue
             end
 
+            -- Simplified response handling (no tools for now)
+            local result = response.choices[1].message.content
+            chatBox.sendMessage(result, bot_name, "<>")
+            table.insert(messages, { role = "assistant", content = result })
+
+            --[[
+            -- Comment out tool handling for now
             local result = process_llm_response(response)
 
             if type(result) == "table" then
@@ -128,18 +136,19 @@ local function main()
                 local final_ok, final_response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
                 if final_ok then
                     local final_message = final_response.choices[1].message.content
-                    chatBox.sendMessage(final_message, bot_name)
+                    chatBox.sendMessage(final_message, bot_name, "<>")  
                     table.insert(messages, { role = "assistant", content = final_message })
                 else
                     printError("Second LLM Request Failed: " .. tostring(final_response))
-                    chatBox.sendMessage("Sorry, I encountered an error after using my tool.", bot_name)
+                    chatBox.sendMessage("Sorry, I encountered an error after using my tool.", bot_name, "<>")
                 end
 
             elseif type(result) == "string" then
                 -- The LLM returned a direct message.
-                chatBox.sendMessage(result, bot_name)
+                chatBox.sendMessage(result, bot_name, "<>")
                 table.insert(messages, { role = "assistant", content = result })
             end
+            --]]
 
             ::continue::
         end

@@ -57,7 +57,7 @@ function LLM.request(api_key, model, messages, tools)
     
     print("[DEBUG] Model: " .. tostring(model))
     print("[DEBUG] Messages count: " .. #messages)
-    print("[DEBUG] Tools count: " .. (tools and #tools or 0))
+    -- print("[DEBUG] Tools count: " .. (tools and #tools or 0))
     
     -- Use exact same headers as working GPT.lua example
     local headers = {
@@ -66,16 +66,20 @@ function LLM.request(api_key, model, messages, tools)
     }
     print("[DEBUG] Headers prepared (matching GPT.lua format)")
 
+    -- Simplified body - just like GPT.lua example (no tools for now)
     local body = {
         model = model,
         messages = messages,
     }
 
+    -- Comment out tools for now to match working GPT.lua exactly
+    --[[
     if tools and #tools > 0 then
         body.tools = tools
         body.tool_choice = "auto"
         print("[DEBUG] Tools added to request")
     end
+    --]]
 
     print("[DEBUG] Serializing request body...")
     -- Use the same serialization as working GPT.lua example
