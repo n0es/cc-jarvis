@@ -119,6 +119,17 @@ function LLM.request(api_key, model, messages, tools)
     print("[DEBUG] Request body serialized successfully")
     print("[DEBUG] Request size: " .. #body_json .. " bytes")
     
+    -- Write the full request to a file for debugging
+    print("[DEBUG] Writing request to debug_request.json for inspection...")
+    local debug_file = fs.open("debug_request.json", "w")
+    if debug_file then
+        debug_file.write(body_json)
+        debug_file.close()
+        print("[DEBUG] Request written to debug_request.json - you can copy this to compare with working curl")
+    else
+        print("[DEBUG] Warning: Could not write debug file")
+    end
+    
     -- Validate JSON before sending
     if not body_json or body_json == "" then
         return false, "Failed to serialize request body to JSON"
