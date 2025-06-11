@@ -169,8 +169,8 @@ def main():
         print(f"Could not write installer file: {e}")
         return
 
-    print(f"\nInstaller script created at: {installer_path}")
-    print("\nTo use this installer:")
+    print(f"\\nInstaller script created at: {installer_path}")
+    print("\\nTo use this installer:")
     print("1. Set up a public GitHub repository for this project.")
     print("2. Commit and push your files, including the generated installer.")
     print("3. In your ComputerCraft world, ensure HTTP is enabled in the config.")
