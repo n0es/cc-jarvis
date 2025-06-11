@@ -6,13 +6,33 @@ local llm = require("lib.jarvis.llm")
 local tools = require("lib.jarvis.tools")
 
 -- Load config
-local ok, config = pcall(require, "programs.jarvis.config")
+local CONFIG_PATH_LUA = "etc.jarvis.config"
+local CONFIG_PATH_FS = "/etc/jarvis/config.lua"
+
+local ok, config = pcall(require, CONFIG_PATH_LUA)
 if not ok then
-    error("Could not load config.lua. Make sure it exists at /programs/jarvis/config.lua and contains your API key.", 0)
+    local err_msg = ([[
+Could not load config from '%s'.
+Please create this file and add your OpenAI API key.
+
+Example to paste into the new file:
+--------------------------------------------------
+local config = {}
+
+-- Your OpenAI API key from https://platform.openai.com/api-keys
+config.openai_api_key = "YOUR_API_KEY_HERE"
+
+-- The model to use. "gpt-4o" is a good default.
+config.model = "gpt-4o"
+
+return config
+--------------------------------------------------
+]]):format(CONFIG_PATH_FS)
+    error(err_msg, 0)
 end
 
 if not config.openai_api_key or config.openai_api_key == "YOUR_API_KEY_HERE" then
-    error("API key is not set in config.lua. Please add your OpenAI API key.", 0)
+    error("API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
 end
 
 

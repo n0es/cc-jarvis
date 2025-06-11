@@ -29,7 +29,7 @@ INSTALLER_TEMPLATE = textwrap.dedent("""
     local function install()
         print("Removing old version if it exists...")
         -- Delete the main program file and the library directory to ensure a clean install.
-        local program_path = "{program_to_run}.lua"
+        local program_path = "{program_to_run}"
         local lib_path = "{lib_dir}"
         if fs.exists(program_path) then
             print("  Deleting " .. program_path)
@@ -121,7 +121,7 @@ def main():
                 continue
 
             if rel_path == MAIN_SRC_FILE:
-                dest_path = f"{program_to_run_on_cc}.lua"
+                dest_path = program_to_run_on_cc
                 program_file_on_cc = dest_path
             else:
                 dest_path = f"{LIB_DIR_ON_CC}/{rel_path}"
