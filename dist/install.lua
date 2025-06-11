@@ -565,15 +565,50 @@ function LLM.request(api_key, model, messages, tools)
     print("[DEBUG] Request body serialized successfully")
     print("[DEBUG] Request size: " .. #body_json .. " bytes")
     
-    -- Write the full request to a file for debugging
-    print("[DEBUG] Writing request to debug_request.json for inspection...")
-    local debug_file = fs.open("debug_request.json", "w")
-    if debug_file then
-        debug_file.write(body_json)
-        debug_file.close()
-        print("[DEBUG] Request written to debug_request.json - you can copy this to compare with working curl")
-    else
-        print("[DEBUG] Warning: Could not write debug file")
+    -- Write comprehensive debug log
+    print("[DEBUG] Writing comprehensive debug log...")
+    local debug_log = {
+        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
+        tick_time = os.clock(),
+        request = {
+            url = API_URL,
+            headers = headers,
+            body_raw = body,
+            body_json = body_json,
+            message_count = #messages,
+            messages = messages
+        },
+        response = nil,
+        error = nil,
+        success = false
+    }
+    
+    local function write_debug_log(additional_data)
+        if additional_data then
+            for k, v in pairs(additional_data) do
+                debug_log[k] = v
+            end
+        end
+        
+        local debug_file = fs.open("debug_full.json", "w")
+        if debug_file then
+            debug_file.write(textutils.serializeJSON(debug_log))
+            debug_file.close()
+            print("[DEBUG] Full debug log written to debug_full.json")
+        else
+            print("[DEBUG] Warning: Could not write full debug log")
+        end
+    end
+    
+    -- Write initial debug state
+    write_debug_log()
+    
+    -- Also write the formatted JSON request and response separately for easy copying
+    local debug_request_file = fs.open("debug_request.json", "w")
+    if debug_request_file then
+        debug_request_file.write(body_json)
+        debug_request_file.close()
+        print("[DEBUG] Request written to debug_request.json")
     end
     
     -- Validate JSON before sending
@@ -601,15 +636,12 @@ function LLM.request(api_key, model, messages, tools)
             handle.close()
             print("[DEBUG] Response received: " .. #response_body .. " bytes")
             
-            -- Write the full response to a file for debugging
-            print("[DEBUG] Writing response to debug_response.json for inspection...")
+            -- Write the response to separate file for easy copying
             local debug_response_file = fs.open("debug_response.json", "w")
             if debug_response_file then
                 debug_response_file.write(response_body)
                 debug_response_file.close()
-                print("[DEBUG] Response written to debug_response.json - you can copy this to see the response structure")
-            else
-                print("[DEBUG] Warning: Could not write debug response file")
+                print("[DEBUG] Response written to debug_response.json")
             end
             
             -- Show first 200 chars of response for debugging
@@ -621,16 +653,34 @@ function LLM.request(api_key, model, messages, tools)
 
             if not response_data then
                 print("[DEBUG] Failed to parse JSON response")
-                return false, "Failed to decode JSON response from API: " .. tostring(response_body)
+                local error_msg = "Failed to decode JSON response from API: " .. tostring(response_body)
+                write_debug_log({
+                    error = error_msg,
+                    success = false,
+                    response_raw = response_body
+                })
+                return false, error_msg
             end
             print("[DEBUG] JSON response parsed successfully")
             
             if response_data.error then
                 print("[DEBUG] API returned error: " .. response_data.error.message)
-                return false, "API Error: " .. response_data.error.message
+                local error_msg = "API Error: " .. response_data.error.message
+                write_debug_log({
+                    error = error_msg,
+                    success = false,
+                    response = response_data,
+                    response_raw = response_body
+                })
+                return false, error_msg
             end
 
             print("[DEBUG] LLM request completed successfully")
+            write_debug_log({
+                success = true,
+                response = response_data,
+                response_raw = response_body
+            })
             return true, response_data
             
         elseif event == "http_failure" then
@@ -642,6 +692,11 @@ function LLM.request(api_key, model, messages, tools)
                     print("[DEBUG] Error details: " .. handle)
                 end
             end
+            write_debug_log({
+                error = error_msg,
+                success = false,
+                http_failure_details = handle
+            })
             return false, error_msg
         end
         
