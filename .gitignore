@@ -10,6 +10,11 @@ venv/
 # Ignore build artifacts
 dist/
 
+# Ignore local configuration files
+config.lua
+src/config.lua
+src/config.lua.example
+
 # IDE-specific
 .vscode/
 .idea/ 
