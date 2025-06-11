@@ -27,13 +27,15 @@ function LLM.request(api_key, model, messages, tools)
 
     if not success then
         local err_msg = "HTTP request failed."
-        if response then
+        if response and response.readAll then
             err_msg = err_msg .. " Response: " .. response.readAll()
+            response.close()
         end
         return false, err_msg
     end
 
     local response_body = response.readAll()
+    response.close()
     local response_data = textutils.unserialiseJSON(response_body)
 
     if not response_data then

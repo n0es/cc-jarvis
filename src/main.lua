@@ -60,9 +60,12 @@ local function process_llm_response(response_data)
             local tool_func = tools.get_tool(func_name)
 
             if tool_func then
-                -- In this simple example, we don't use arguments, but a real implementation would pass them.
-                -- local args = textutils.unserialiseJSON(func_args_json)
-                local result = tool_func()
+                local args = nil
+                if func_args_json and func_args_json ~= "" and func_args_json ~= "{}" then
+                    args = textutils.unserialiseJSON(func_args_json)
+                end
+                
+                local result = tool_func(args)
                 
                 table.insert(tool_outputs, {
                     tool_call_id = tool_call.id,
@@ -87,54 +90,58 @@ local function main()
     end
 
     print("Jarvis is online. Waiting for messages.")
+    print("Current bot name: " .. tools.get_bot_name())
 
     local messages = {
-        { role = "system", content = "You are Jarvis, a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world." }
+        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Only respond when someone addresses you by name." }
     }
     local tool_schemas = tools.get_all_schemas()
 
     while true do
         local _, player, message_text = os.pullEvent("chat")
 
-        print(player .. " says: " .. message_text)
-        table.insert(messages, { role = "user", content = message_text })
+        -- Only respond if the message is addressed to the bot
+        if tools.is_message_for_bot(message_text) then
+            print(player .. " says: " .. message_text)
+            table.insert(messages, { role = "user", content = message_text })
 
-        -- Call the LLM
-        chatBox.sendMessageToPlayer("Thinking...", player)
-        local ok, response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
+            -- Call the LLM
+            chatBox.sendMessageToPlayer("Thinking...", player)
+            local ok, response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
 
-        if not ok then
-            printError("LLM Request Failed: " .. tostring(response))
-            chatBox.sendMessageToPlayer("Sorry, I encountered an error.", player)
-            table.remove(messages) -- Remove the failed user message
-            goto continue
-        end
-
-        local result = process_llm_response(response)
-
-        if type(result) == "table" then
-            -- The LLM called a tool, so we add its output to the conversation and run again.
-            for _, tool_output in ipairs(result) do
-                table.insert(messages, tool_output)
-            end
-            
-            local final_ok, final_response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
-            if final_ok then
-                local final_message = final_response.choices[1].message.content
-                chatBox.sendMessageToPlayer(final_message, player)
-                table.insert(messages, { role = "assistant", content = final_message })
-            else
-                printError("Second LLM Request Failed: " .. tostring(final_response))
-                chatBox.sendMessageToPlayer("Sorry, I encountered an error after using my tool.", player)
+            if not ok then
+                printError("LLM Request Failed: " .. tostring(response))
+                chatBox.sendMessageToPlayer("Sorry, I encountered an error.", player)
+                table.remove(messages) -- Remove the failed user message
+                goto continue
             end
 
-        elseif type(result) == "string" then
-            -- The LLM returned a direct message.
-            chatBox.sendMessageToPlayer(result, player)
-            table.insert(messages, { role = "assistant", content = result })
-        end
+            local result = process_llm_response(response)
 
-        ::continue::
+            if type(result) == "table" then
+                -- The LLM called a tool, so we add its output to the conversation and run again.
+                for _, tool_output in ipairs(result) do
+                    table.insert(messages, tool_output)
+                end
+                
+                local final_ok, final_response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
+                if final_ok then
+                    local final_message = final_response.choices[1].message.content
+                    chatBox.sendMessageToPlayer(final_message, player)
+                    table.insert(messages, { role = "assistant", content = final_message })
+                else
+                    printError("Second LLM Request Failed: " .. tostring(final_response))
+                    chatBox.sendMessageToPlayer("Sorry, I encountered an error after using my tool.", player)
+                end
+
+            elseif type(result) == "string" then
+                -- The LLM returned a direct message.
+                chatBox.sendMessageToPlayer(result, player)
+                table.insert(messages, { role = "assistant", content = result })
+            end
+
+            ::continue::
+        end
     end
 end
 
