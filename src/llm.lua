@@ -9,19 +9,26 @@ local API_URL = "https://api.openai.com/v1/chat/completions"
 function LLM.test_openai_connectivity()
     print("[DEBUG] Testing basic connectivity to api.openai.com...")
     
-    -- Try a simple GET request to OpenAI (this will return 404, but that's expected)
-    local success, response = http.get("https://api.openai.com/")
+    -- Try a simpler test - just check if we can resolve the domain
+    -- Instead of hitting the root, try a known endpoint that should return a proper error
+    local test_headers = {
+        ["User-Agent"] = "ComputerCraft",
+    }
+    
+    print("[DEBUG] Attempting simple connectivity test...")
+    local success, response = http.get("https://api.openai.com/v1/models", test_headers)
     
     if success then
         local body = response.readAll()
         response.close()
-        print("[DEBUG] OpenAI domain is reachable (got response)")
-        return true, "OpenAI domain reachable"
+        print("[DEBUG] OpenAI API is reachable (got response from /v1/models)")
+        return true, "OpenAI API reachable"
     else
-        local err_msg = "Cannot reach OpenAI domain"
+        local err_msg = "Cannot reach OpenAI API"
         if response then
             if type(response) == "string" then
                 err_msg = err_msg .. ": " .. response
+                print("[DEBUG] Error: " .. response)
             end
         end
         print("[DEBUG] " .. err_msg)
@@ -33,35 +40,39 @@ function LLM.request(api_key, model, messages, tools)
     print("[DEBUG] Starting LLM request...")
     print("[DEBUG] Target URL: " .. API_URL)
     
-    -- Test connectivity first
-    local conn_ok, conn_msg = LLM.test_openai_connectivity()
-    if not conn_ok then
-        return false, "Connectivity test failed: " .. conn_msg
-    end
-    
-    -- Check if HTTP is enabled
+    -- Check if HTTP is enabled first
     if not http then
         print("[DEBUG] HTTP API not available")
         return false, "HTTP API is not available. Ensure 'http_enable' is set to true in computercraft-common.toml"
     end
     print("[DEBUG] HTTP API is available")
     
+    -- Test connectivity 
+    local conn_ok, conn_msg = LLM.test_openai_connectivity()
+    if not conn_ok then
+        -- Don't fail completely on connectivity test - sometimes the test endpoint fails but the real API works
+        print("[DEBUG] Connectivity test failed but continuing anyway: " .. conn_msg)
+    end
+    
     -- Debug API key (show first/last 4 chars only for security)
     if api_key and #api_key > 8 then
         print("[DEBUG] API key format: " .. api_key:sub(1,4) .. "..." .. api_key:sub(-4))
     else
         print("[DEBUG] API key appears invalid or too short")
+        return false, "Invalid API key format"
     end
     
     print("[DEBUG] Model: " .. tostring(model))
     print("[DEBUG] Messages count: " .. #messages)
     print("[DEBUG] Tools count: " .. (tools and #tools or 0))
     
+    -- Add User-Agent header to avoid issues
     local headers = {
         ["Content-Type"] = "application/json",
         ["Authorization"] = "Bearer " .. api_key,
+        ["User-Agent"] = "ComputerCraft-Jarvis/1.0",
     }
-    print("[DEBUG] Headers prepared")
+    print("[DEBUG] Headers prepared with User-Agent")
 
     local body = {
         model = model,
@@ -87,6 +98,11 @@ function LLM.request(api_key, model, messages, tools)
     
     print("[DEBUG] Request body serialized successfully")
     print("[DEBUG] Request size: " .. #body_json .. " bytes")
+    
+    -- Validate JSON before sending
+    if not body_json or body_json == "" then
+        return false, "Failed to serialize request body to JSON"
+    end
     
     -- Show first 200 chars of request for debugging
     print("[DEBUG] Request preview: " .. body_json:sub(1, 200) .. (#body_json > 200 and "..." or ""))
