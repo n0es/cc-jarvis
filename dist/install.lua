@@ -548,6 +548,17 @@ function LLM.request(api_key, model, messages, tools)
             handle.close()
             print("[DEBUG] Response received: " .. #response_body .. " bytes")
             
+            -- Write the full response to a file for debugging
+            print("[DEBUG] Writing response to debug_response.json for inspection...")
+            local debug_response_file = fs.open("debug_response.json", "w")
+            if debug_response_file then
+                debug_response_file.write(response_body)
+                debug_response_file.close()
+                print("[DEBUG] Response written to debug_response.json - you can copy this to see the response structure")
+            else
+                print("[DEBUG] Warning: Could not write debug response file")
+            end
+            
             -- Show first 200 chars of response for debugging
             print("[DEBUG] Response preview: " .. response_body:sub(1, 200) .. (#response_body > 200 and "..." or ""))
             
