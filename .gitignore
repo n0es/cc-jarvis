@@ -7,9 +7,6 @@ __pycache__/
 env/
 venv/
 
-# Ignore build artifacts
-dist/
-
 # IDE-specific
 .vscode/
 .idea/ 
