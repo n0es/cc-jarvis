@@ -55,7 +55,8 @@ function Tools.get_tool(name)
 end
 
 return Tools 
-]]\nfiles["programs/jarvis"] = [[
+]]
+files["programs/jarvis"] = [[
 -- Jarvis: Main Program
 -- An LLM-powered assistant for ComputerCraft.
 
@@ -85,7 +86,7 @@ if not ok then
         "",
         "return config",
         "--------------------------------------------------"
-    }, "\\n")
+    }, "\n")
     error(err_msg, 0)
 end
 
@@ -190,7 +191,8 @@ local function main()
 end
 
 main() 
-]]\nfiles["lib/jarvis/llm.lua"] = [[
+]]
+files["lib/jarvis/llm.lua"] = [[
 -- llm.lua
 -- Handles communication with the OpenAI API.
 
