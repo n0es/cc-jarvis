@@ -54,16 +54,43 @@ function Tools.is_message_for_bot(message)
     return msg_lower:match("^" .. bot_name .. "[%s,:%?]") ~= nil
 end
 
--- Tool Definition: get_time
--- This function gets the current in-game time.
-function Tools.get_time()
-    return { time = textutils.formatTime(os.time("ingame"), false) }
-end
-
 -- Tool Definition: change_name
 -- This function changes the bot's name.
 function Tools.change_name(new_name)
     return Tools.set_bot_name(new_name)
+end
+
+-- Tool Definition: test_connection
+-- This function tests HTTP connectivity.
+function Tools.test_connection()
+    if not http then
+        return { success = false, error = "HTTP API is not available. Check computercraft-common.toml settings." }
+    end
+    
+    -- Test with a simple HTTP request
+    local test_url = "https://httpbin.org/get"
+    print("Testing HTTP connectivity to " .. test_url)
+    
+    local success, response = http.get(test_url)
+    if success then
+        local body = response.readAll()
+        response.close()
+        return { 
+            success = true, 
+            message = "HTTP connectivity is working", 
+            test_response_size = #body 
+        }
+    else
+        local error_msg = "HTTP test failed"
+        if response then
+            if type(response) == "string" then
+                error_msg = error_msg .. ": " .. response
+            else
+                error_msg = error_msg .. ": Unknown error"
+            end
+        end
+        return { success = false, error = error_msg }
+    end
 end
 
 -- Register the get_time tool with its implementation and schema for the LLM.
@@ -108,6 +135,28 @@ registry.change_name = {
     },
 }
 
+-- Register the test_connection tool
+registry.test_connection = {
+    func = Tools.test_connection,
+    schema = {
+        type = "function",
+        ["function"] = {
+            name = "test_connection",
+            description = "Test HTTP connectivity to diagnose connection issues.",
+            parameters = {
+                type = "object",
+                properties = {},
+                required = {},
+            },
+        },
+    },
+}
+
+-- Tool Definition: get_time
+-- This function gets the current in-game time.
+function Tools.get_time()
+    return { time = textutils.formatTime(os.time("ingame"), false) }
+end
 
 -- Function to get all tool schemas to send to the LLM.
 function Tools.get_all_schemas()
