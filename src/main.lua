@@ -11,23 +11,23 @@ local CONFIG_PATH_FS = "/etc/jarvis/config.lua"
 
 local ok, config = pcall(require, CONFIG_PATH_LUA)
 if not ok then
-    local err_msg = ([[
-Could not load config from '%s'.
-Please create this file and add your OpenAI API key.
-
-Example to paste into the new file:
---------------------------------------------------
-local config = {}
-
--- Your OpenAI API key from https://platform.openai.com/api-keys
-config.openai_api_key = "YOUR_API_KEY_HERE"
-
--- The model to use. "gpt-4o" is a good default.
-config.model = "gpt-4o"
-
-return config
---------------------------------------------------
-]]):format(CONFIG_PATH_FS)
+    local err_msg = table.concat({
+        "Could not load config from '" .. CONFIG_PATH_FS .. "'.",
+        "Please create this file and add your OpenAI API key.",
+        "",
+        "Example to paste into the new file:",
+        "--------------------------------------------------",
+        "local config = {}",
+        "",
+        '-- Your OpenAI API key from https://platform.openai.com/api-keys',
+        'config.openai_api_key = "YOUR_API_KEY_HERE"',
+        "",
+        '-- The model to use. "gpt-4o" is a good default.',
+        'config.model = "gpt-4o"',
+        "",
+        "return config",
+        "--------------------------------------------------"
+    }, "\\n")
     error(err_msg, 0)
 end
 
