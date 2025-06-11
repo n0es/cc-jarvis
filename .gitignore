@@ -1,0 +1,15 @@
+# Ignore Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+
+# Ignore build artifacts
+dist/
+
+# IDE-specific
+.vscode/
+.idea/ 
