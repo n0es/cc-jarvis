@@ -70,7 +70,7 @@ INSTALLER_TEMPLATE = textwrap.dedent("""
             end
             
             local config_content = [[-- Configuration for Jarvis
-local config = {}
+local config = {{}}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
 -- Replace YOUR_API_KEY_HERE with your actual API key
