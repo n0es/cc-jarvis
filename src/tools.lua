@@ -67,7 +67,9 @@ function Tools.test_connection()
         return { success = false, error = "HTTP API is not available. Check computercraft-common.toml settings." }
     end
     
-    -- Test with a simple HTTP request
+    local results = {}
+    
+    -- Test 1: General HTTP connectivity
     local test_url = "https://httpbin.org/get"
     print("Testing HTTP connectivity to " .. test_url)
     
@@ -75,22 +77,50 @@ function Tools.test_connection()
     if success then
         local body = response.readAll()
         response.close()
-        return { 
+        results.general_http = { 
             success = true, 
-            message = "HTTP connectivity is working", 
-            test_response_size = #body 
+            message = "General HTTP connectivity is working", 
+            response_size = #body 
         }
     else
-        local error_msg = "HTTP test failed"
+        local error_msg = "General HTTP test failed"
         if response then
             if type(response) == "string" then
                 error_msg = error_msg .. ": " .. response
-            else
-                error_msg = error_msg .. ": Unknown error"
             end
         end
-        return { success = false, error = error_msg }
+        results.general_http = { success = false, error = error_msg }
     end
+    
+    -- Test 2: OpenAI domain connectivity
+    print("Testing connectivity to OpenAI domain...")
+    local openai_success, openai_response = http.get("https://api.openai.com/")
+    if openai_success then
+        local openai_body = openai_response.readAll()
+        openai_response.close()
+        results.openai_domain = {
+            success = true,
+            message = "OpenAI domain is reachable",
+            response_size = #openai_body
+        }
+    else
+        local openai_error = "OpenAI domain test failed"
+        if openai_response then
+            if type(openai_response) == "string" then
+                openai_error = openai_error .. ": " .. openai_response
+            end
+        end
+        results.openai_domain = { success = false, error = openai_error }
+    end
+    
+    -- Overall result
+    local overall_success = results.general_http.success and results.openai_domain.success
+    
+    return {
+        success = overall_success,
+        message = overall_success and "All connectivity tests passed" or "Some connectivity tests failed",
+        results = results
+    }
 end
 
 -- Register the get_time tool with its implementation and schema for the LLM.
