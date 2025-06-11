@@ -9,8 +9,15 @@ local tools = require("lib.jarvis.tools")
 local CONFIG_PATH_LUA = "etc.jarvis.config"
 local CONFIG_PATH_FS = "/etc/jarvis/config.lua"
 
-local ok, config = pcall(require, CONFIG_PATH_LUA)
-if not ok then
+local config
+if fs.exists(CONFIG_PATH_FS) then
+    local config_func, err = loadfile(CONFIG_PATH_FS)
+    if config_func then
+        config = config_func()
+    else
+        error("Failed to load config file: " .. tostring(err), 0)
+    end
+else
     local err_msg = table.concat({
         "Could not load config from '" .. CONFIG_PATH_FS .. "'.",
         "Please create this file and add your OpenAI API key.",
