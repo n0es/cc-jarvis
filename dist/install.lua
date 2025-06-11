@@ -1,10 +1,10 @@
 
--- Jarvis Installer
+    -- Jarvis Installer
 
-local files = {}
+    local files = {}
 
--- Packed files will be inserted here by the build script.
-files["programs/jarvis"] = [[
+    -- Packed files will be inserted here by the build script.
+    files["programs/jarvis"] = [[
 -- Jarvis: Main Program
 -- An LLM-powered assistant for ComputerCraft.
 
@@ -252,64 +252,99 @@ end
 return LLM 
 ]]
 
-local function install()
-    print("Removing old version if it exists...")
-    -- Delete the main program file and the library directory to ensure a clean install.
-    local program_path = "programs/jarvis"
-    local lib_path = "programs/lib/jarvis"
-    if fs.exists(program_path) then
-        print("  Deleting " .. program_path)
-        fs.delete(program_path)
-    end
-    if fs.exists(lib_path) then
-        print("  Deleting " .. lib_path)
-        fs.delete(lib_path)
-    end
-
-    print("Installing Jarvis...")
-
-    for path, content in pairs(files) do
-        print("Writing " .. path)
-        local dir = path:match("(.*)/")
-        if dir and not fs.exists(dir) then
-            fs.makeDir(dir)
+    local function install()
+        print("Removing old version if it exists...")
+        -- Delete the main program file and the library directory to ensure a clean install.
+        local program_path = "programs/jarvis"
+        local lib_path = "programs/lib/jarvis"
+        if fs.exists(program_path) then
+            print("  Deleting " .. program_path)
+            fs.delete(program_path)
+        end
+        if fs.exists(lib_path) then
+            print("  Deleting " .. lib_path)
+            fs.delete(lib_path)
         end
 
-        -- No need to check for existence, we are performing a clean install.
-        local file, err = fs.open(path, "w")
-        if not file then
-            printError("Failed to open " .. path .. ": " .. tostring(err))
-            return
+        print("Installing Jarvis...")
+
+        for path, content in pairs(files) do
+            print("Writing " .. path)
+            local dir = path:match("(.*)/")
+            if dir and not fs.exists(dir) then
+                fs.makeDir(dir)
+            end
+
+            -- No need to check for existence, we are performing a clean install.
+            local file, err = fs.open(path, "w")
+            if not file then
+                printError("Failed to open " .. path .. ": " .. tostring(err))
+                return
+            end
+            file.write(content)
+            file.close()
         end
-        file.write(content)
-        file.close()
+
+        -- Create placeholder config file if it doesn't exist
+        local config_path = "/etc/jarvis/config.lua"
+        if not fs.exists(config_path) then
+            print("Creating placeholder config file at " .. config_path)
+            local config_dir = "/etc/jarvis"
+            if not fs.exists(config_dir) then
+                fs.makeDir(config_dir)
+            end
+
+            local config_content = [[-- Configuration for Jarvis
+local config = {}
+
+-- Your OpenAI API key from https://platform.openai.com/api-keys
+-- Replace YOUR_API_KEY_HERE with your actual API key
+config.openai_api_key = "YOUR_API_KEY_HERE"
+
+-- The model to use. "gpt-4o" is a good default.
+config.model = "gpt-4o"
+
+return config
+]]
+
+            local config_file = fs.open(config_path, "w")
+            if config_file then
+                config_file.write(config_content)
+                config_file.close()
+                print("Placeholder config created. Edit " .. config_path .. " and add your API key.")
+            else
+                printError("Failed to create config file at " .. config_path)
+            end
+        else
+            print("Config file already exists at " .. config_path)
+        end
+
+        local startup_path = "startup.lua"
+        local program_to_run = "programs/jarvis"
+
+        local current_startup_content
+        if fs.exists(startup_path) then
+            local f = fs.open(startup_path, "r")
+            current_startup_content = f.readAll()
+            f.close()
+        end
+
+        if not current_startup_content or not current_startup_content:find(program_to_run, 1, true) then
+            print("Adding Jarvis to startup file.")
+            local startup_file = fs.open(startup_path, "a")
+            startup_file.write(('shell.run("%s")\n'):format(program_to_run))
+            startup_file.close()
+        else
+            print("Jarvis already in startup file.")
+        end
+
+        print([[
+
+    Installation complete!
+    IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
+    Reboot the computer to start Jarvis automatically.
+    Or, to run Jarvis now, execute: 'programs/jarvis'
+    ]])
     end
 
-    local startup_path = "startup.lua"
-    local program_to_run = "programs/jarvis"
-
-    local current_startup_content
-    if fs.exists(startup_path) then
-        local f = fs.open(startup_path, "r")
-        current_startup_content = f.readAll()
-        f.close()
-    end
-
-    if not current_startup_content or not current_startup_content:find(program_to_run, 1, true) then
-        print("Adding Jarvis to startup file.")
-        local startup_file = fs.open(startup_path, "a")
-        startup_file.write(('shell.run("%s")\n'):format(program_to_run))
-        startup_file.close()
-    else
-        print("Jarvis already in startup file.")
-    end
-
-    print([[
-
-Installation complete!
-Reboot the computer to start Jarvis automatically.
-Or, to run Jarvis now, execute: 'programs/jarvis'
-]])
-end
-
-install()
+    install()
