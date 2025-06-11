@@ -44,19 +44,14 @@ end
 
 -- Extract response content from the new API format
 local function extract_response_content(response_data)
-    -- The new API format might return content differently
-    -- Try multiple possible response structures
-    if response_data.content then
-        if type(response_data.content) == "table" and #response_data.content > 0 then
-            -- Content is an array of content objects
-            local content_obj = response_data.content[1]
+    -- Based on the actual response structure: response.output[0].content[0].text
+    if response_data.output and type(response_data.output) == "table" and #response_data.output > 0 then
+        local message = response_data.output[1]
+        if message.content and type(message.content) == "table" and #message.content > 0 then
+            local content_obj = message.content[1]
             if content_obj.text then
                 return content_obj.text
-            elseif content_obj.content then
-                return content_obj.content
             end
-        elseif type(response_data.content) == "string" then
-            return response_data.content
         end
     end
     
@@ -65,16 +60,6 @@ local function extract_response_content(response_data)
         local choice = response_data.choices[1]
         if choice.message and choice.message.content then
             return choice.message.content
-        end
-    end
-    
-    -- Another possible structure for the new API
-    if response_data.output and response_data.output.content then
-        if type(response_data.output.content) == "table" and #response_data.output.content > 0 then
-            local content_obj = response_data.output.content[1]
-            if content_obj.text then
-                return content_obj.text
-            end
         end
     end
     
@@ -108,13 +93,76 @@ local function main()
     -- Comment out tools for now to focus on basic chat
     -- local tool_schemas = tools.get_all_schemas()
 
+    -- Time-based context and listening mode variables
+    local CONTEXT_TIMEOUT = 5 * 60 * 20  -- 5 minutes in ticks (20 ticks per second)
+    local LISTEN_MODE_TIMEOUT = 2 * 60 * 20  -- 2 minutes in ticks
+    local last_message_time = os.clock() * 20  -- Convert to ticks
+    local listen_mode_end_time = 0  -- When to stop listening to all messages
+    local in_listen_mode = false
+
+    -- Function to check if bot name is mentioned anywhere in message
+    local function is_bot_mentioned(message)
+        local bot_name = tools.get_bot_name()
+        local msg_lower = message:lower()
+        return msg_lower:find(bot_name, 1, true) ~= nil
+    end
+
+    -- Function to clear context if too much time has passed
+    local function check_context_timeout()
+        local current_time = os.clock() * 20
+        if current_time - last_message_time > CONTEXT_TIMEOUT then
+            print("[INFO] Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
+            -- Reset to just the system message
+            messages = {
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
+            }
+            return true
+        end
+        return false
+    end
+
+    -- Function to check if we should listen to all messages
+    local function should_listen_to_message(message)
+        local current_time = os.clock() * 20
+        
+        -- Check if listen mode has expired
+        if in_listen_mode and current_time > listen_mode_end_time then
+            in_listen_mode = false
+            print("[INFO] Listen mode ended")
+        end
+        
+        -- If bot is mentioned, enter listen mode
+        if is_bot_mentioned(message) then
+            in_listen_mode = true
+            listen_mode_end_time = current_time + LISTEN_MODE_TIMEOUT
+            print("[INFO] Bot mentioned - entering listen mode for " .. LISTEN_MODE_TIMEOUT / 20 / 60 .. " minutes")
+            return true
+        end
+        
+        -- If in listen mode, listen to all messages
+        if in_listen_mode then
+            print("[INFO] Listening due to active listen mode")
+            return true
+        end
+        
+        return false
+    end
+
     while true do
         local _, player, message_text = os.pullEvent("chat")
         local bot_name = tools.get_bot_name()
+        local current_time = os.clock() * 20
 
-        -- Only respond if the message is addressed to the bot
-        if tools.is_message_for_bot(message_text) then
+        -- Check for context timeout before processing message
+        check_context_timeout()
+
+        -- Check if we should respond to this message
+        if should_listen_to_message(message_text) then
             print(player .. " says: " .. message_text)
+            
+            -- Update last message time
+            last_message_time = current_time
+            
             table.insert(messages, { role = "user", content = message_text })
 
             -- Call the LLM (without tools for now)
