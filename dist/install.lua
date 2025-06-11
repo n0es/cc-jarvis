@@ -33,6 +33,19 @@ end
 main() ]]
 
 local function install()
+    print("Removing old version if it exists...")
+    -- Delete the main program file and the library directory to ensure a clean install.
+    local program_path = "programs/jarvis.lua"
+    local lib_path = "lib/jarvis"
+    if fs.exists(program_path) then
+        print("  Deleting " .. program_path)
+        fs.delete(program_path)
+    end
+    if fs.exists(lib_path) then
+        print("  Deleting " .. lib_path)
+        fs.delete(lib_path)
+    end
+
     print("Installing Jarvis...")
 
     for path, content in pairs(files) do
@@ -42,10 +55,7 @@ local function install()
             fs.makeDir(dir)
         end
 
-        if fs.exists(path) then
-            print("  Overwriting existing file.")
-        end
-
+        -- No need to check for existence, we are performing a clean install.
         local file, err = fs.open(path, "w")
         if not file then
             printError("Failed to open " .. path .. ": " .. tostring(err))
