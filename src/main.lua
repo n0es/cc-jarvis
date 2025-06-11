@@ -99,19 +99,20 @@ local function main()
 
     while true do
         local _, player, message_text = os.pullEvent("chat")
+        local bot_name = tools.get_bot_name()
 
         -- Only respond if the message is addressed to the bot
         if tools.is_message_for_bot(message_text) then
             print(player .. " says: " .. message_text)
             table.insert(messages, { role = "user", content = message_text })
 
-            -- Call the LLM
-            chatBox.sendMessageToPlayer("Thinking...", player)
+            -- Call the LLM 
+            chatBox.sendMessage("Thinking...", bot_name)
             local ok, response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
 
             if not ok then
                 printError("LLM Request Failed: " .. tostring(response))
-                chatBox.sendMessageToPlayer("Sorry, I encountered an error.", player)
+                chatBox.sendMessage("Sorry, I encountered an error.", bot_name)
                 table.remove(messages) -- Remove the failed user message
                 goto continue
             end
@@ -127,16 +128,16 @@ local function main()
                 local final_ok, final_response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
                 if final_ok then
                     local final_message = final_response.choices[1].message.content
-                    chatBox.sendMessageToPlayer(final_message, player)
+                    chatBox.sendMessage(final_message, bot_name)
                     table.insert(messages, { role = "assistant", content = final_message })
                 else
                     printError("Second LLM Request Failed: " .. tostring(final_response))
-                    chatBox.sendMessageToPlayer("Sorry, I encountered an error after using my tool.", player)
+                    chatBox.sendMessage("Sorry, I encountered an error after using my tool.", bot_name)
                 end
 
             elseif type(result) == "string" then
                 -- The LLM returned a direct message.
-                chatBox.sendMessageToPlayer(result, player)
+                chatBox.sendMessage(result, bot_name)
                 table.insert(messages, { role = "assistant", content = result })
             end
 

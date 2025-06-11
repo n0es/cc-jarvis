@@ -40,19 +40,12 @@ function LLM.request(api_key, model, messages, tools)
     print("[DEBUG] Starting LLM request...")
     print("[DEBUG] Target URL: " .. API_URL)
     
-    -- Check if HTTP is enabled first
+    -- Check if HTTP is enabled
     if not http then
         print("[DEBUG] HTTP API not available")
         return false, "HTTP API is not available. Ensure 'http_enable' is set to true in computercraft-common.toml"
     end
     print("[DEBUG] HTTP API is available")
-    
-    -- Test connectivity 
-    local conn_ok, conn_msg = LLM.test_openai_connectivity()
-    if not conn_ok then
-        -- Don't fail completely on connectivity test - sometimes the test endpoint fails but the real API works
-        print("[DEBUG] Connectivity test failed but continuing anyway: " .. conn_msg)
-    end
     
     -- Debug API key (show first/last 4 chars only for security)
     if api_key and #api_key > 8 then
@@ -66,13 +59,12 @@ function LLM.request(api_key, model, messages, tools)
     print("[DEBUG] Messages count: " .. #messages)
     print("[DEBUG] Tools count: " .. (tools and #tools or 0))
     
-    -- Add User-Agent header to avoid issues
+    -- Use exact same headers as working GPT.lua example
     local headers = {
-        ["Content-Type"] = "application/json",
         ["Authorization"] = "Bearer " .. api_key,
-        ["User-Agent"] = "ComputerCraft-Jarvis/1.0",
+        ["Content-Type"] = "application/json"
     }
-    print("[DEBUG] Headers prepared with User-Agent")
+    print("[DEBUG] Headers prepared (matching GPT.lua format)")
 
     local body = {
         model = model,
@@ -86,15 +78,9 @@ function LLM.request(api_key, model, messages, tools)
     end
 
     print("[DEBUG] Serializing request body...")
-    -- Try both spellings of serialize in case one works better
-    local body_json
-    if textutils.serializeJSON then
-        body_json = textutils.serializeJSON(body)
-        print("[DEBUG] Used serializeJSON (American spelling)")
-    else
-        body_json = textutils.serialiseJSON(body)
-        print("[DEBUG] Used serialiseJSON (British spelling)")
-    end
+    -- Use the same serialization as working GPT.lua example
+    local body_json = textutils.serializeJSON(body)
+    print("[DEBUG] Used serializeJSON (matching GPT.lua)")
     
     print("[DEBUG] Request body serialized successfully")
     print("[DEBUG] Request size: " .. #body_json .. " bytes")
@@ -107,14 +93,14 @@ function LLM.request(api_key, model, messages, tools)
     -- Show first 200 chars of request for debugging
     print("[DEBUG] Request preview: " .. body_json:sub(1, 200) .. (#body_json > 200 and "..." or ""))
     
-    print("[DEBUG] Making async HTTP request to: " .. API_URL)
+    print("[DEBUG] Making async HTTP request (matching GPT.lua pattern)...")
     
-    -- Use async http.request like the working GPT.lua example
+    -- Use exact same pattern as working GPT.lua example
     http.request(API_URL, body_json, headers)
     
     print("[DEBUG] HTTP request sent, waiting for response...")
     
-    -- Wait for the response using event handling
+    -- Wait for the response using event handling (exact same as GPT.lua)
     while true do
         local event, url, handle = os.pullEvent()
         
@@ -128,14 +114,8 @@ function LLM.request(api_key, model, messages, tools)
             print("[DEBUG] Response preview: " .. response_body:sub(1, 200) .. (#response_body > 200 and "..." or ""))
             
             print("[DEBUG] Parsing JSON response...")
-            local response_data
-            if textutils.unserializeJSON then
-                response_data = textutils.unserializeJSON(response_body)
-                print("[DEBUG] Used unserializeJSON (American spelling)")
-            else
-                response_data = textutils.unserialiseJSON(response_body)
-                print("[DEBUG] Used unserialiseJSON (British spelling)")
-            end
+            local response_data = textutils.unserializeJSON(response_body)
+            print("[DEBUG] Used unserializeJSON (matching GPT.lua)")
 
             if not response_data then
                 print("[DEBUG] Failed to parse JSON response")
