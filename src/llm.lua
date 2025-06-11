@@ -110,6 +110,15 @@ function LLM.request(api_key, model, messages, tools)
         top_p = 1,
         store = true
     }
+    
+    -- Ensure tools is an empty array, not an empty object (fixes bad request)
+    if not tools or #tools == 0 then
+        -- Create a proper empty array structure
+        body.tools = {}
+        -- Add a dummy element and remove it to force array serialization
+        table.insert(body.tools, "dummy")
+        table.remove(body.tools, 1)
+    end
 
     print("[DEBUG] Serializing request body...")
     -- Use the same serialization as working GPT.lua example
