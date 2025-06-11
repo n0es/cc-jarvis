@@ -68,12 +68,15 @@ end
 
 local function process_llm_response(response_data)
     -- Try to extract content using the new format
+    print("[DEBUG] Processing LLM response...")
     local content = extract_response_content(response_data)
     if content then
+        print("[DEBUG] Successfully extracted content: " .. content)
         return content
     end
     
     -- If we can't extract content, return an error message
+    print("[DEBUG] Failed to extract content from response")
     return "I received a response but couldn't parse it properly."
 end
 
@@ -178,7 +181,9 @@ local function main()
 
             -- Process response using the new format
             local result = process_llm_response(response)
+            print("[DEBUG] About to send message to chat: " .. tostring(result))
             chatBox.sendMessage(result, bot_name, "<>")
+            print("[DEBUG] Message sent to chat successfully")
             table.insert(messages, { role = "assistant", content = result })
 
             --[[
