@@ -4,7 +4,217 @@
     local files = {}
 
     -- Packed files will be inserted here by the build script.
-    files["programs/jarvis"] = [[
+    files["programs/lib/jarvis/tools.lua"] = [[
+-- tools.lua
+-- Defines the functions that the LLM can call.
+
+local Tools = {}
+
+-- A registry to hold the function definitions and their callable implementations.
+local registry = {}
+
+-- Bot name management
+local BOT_NAME_FILE = "/etc/jarvis/botname.txt"
+local DEFAULT_BOT_NAME = "jarvis"
+
+-- Function to get the current bot name
+function Tools.get_bot_name()
+    if fs.exists(BOT_NAME_FILE) then
+        local file = fs.open(BOT_NAME_FILE, "r")
+        if file then
+            local name = file.readAll():gsub("%s+", ""):lower() -- trim whitespace and lowercase
+            file.close()
+            return name ~= "" and name or DEFAULT_BOT_NAME
+        end
+    end
+    return DEFAULT_BOT_NAME
+end
+
+-- Function to set the bot name
+function Tools.set_bot_name(new_name)
+    if not new_name or new_name == "" then
+        return { success = false, message = "Name cannot be empty" }
+    end
+    
+    -- Ensure the directory exists
+    local dir = BOT_NAME_FILE:match("(.*)/")
+    if dir and not fs.exists(dir) then
+        fs.makeDir(dir)
+    end
+    
+    local file = fs.open(BOT_NAME_FILE, "w")
+    if file then
+        file.write(new_name:lower()) -- store in lowercase
+        file.close()
+        return { success = true, message = "Bot name changed to: " .. new_name }
+    else
+        return { success = false, message = "Failed to save name to file" }
+    end
+end
+
+-- Function to check if a message is addressing the bot
+function Tools.is_message_for_bot(message)
+    local bot_name = Tools.get_bot_name()
+    local msg_lower = message:lower():gsub("^%s+", "") -- trim leading whitespace and lowercase
+    
+    -- Check if message starts with bot name followed by space, comma, colon, or question mark
+    return msg_lower:match("^" .. bot_name .. "[%s,:%?]") ~= nil
+end
+
+-- Tool Definition: change_name
+-- This function changes the bot's name.
+function Tools.change_name(new_name)
+    return Tools.set_bot_name(new_name)
+end
+
+-- Tool Definition: test_connection
+-- This function tests HTTP connectivity.
+function Tools.test_connection()
+    if not http then
+        return { success = false, error = "HTTP API is not available. Check computercraft-common.toml settings." }
+    end
+    
+    local results = {}
+    
+    -- Test 1: General HTTP connectivity
+    local test_url = "https://httpbin.org/get"
+    print("Testing HTTP connectivity to " .. test_url)
+    
+    local success, response = http.get(test_url)
+    if success then
+        local body = response.readAll()
+        response.close()
+        results.general_http = { 
+            success = true, 
+            message = "General HTTP connectivity is working", 
+            response_size = #body 
+        }
+    else
+        local error_msg = "General HTTP test failed"
+        if response then
+            if type(response) == "string" then
+                error_msg = error_msg .. ": " .. response
+            end
+        end
+        results.general_http = { success = false, error = error_msg }
+    end
+    
+    -- Test 2: OpenAI domain connectivity
+    print("Testing connectivity to OpenAI domain...")
+    local openai_success, openai_response = http.get("https://api.openai.com/")
+    if openai_success then
+        local openai_body = openai_response.readAll()
+        openai_response.close()
+        results.openai_domain = {
+            success = true,
+            message = "OpenAI domain is reachable",
+            response_size = #openai_body
+        }
+    else
+        local openai_error = "OpenAI domain test failed"
+        if openai_response then
+            if type(openai_response) == "string" then
+                openai_error = openai_error .. ": " .. openai_response
+            end
+        end
+        results.openai_domain = { success = false, error = openai_error }
+    end
+    
+    -- Overall result
+    local overall_success = results.general_http.success and results.openai_domain.success
+    
+    return {
+        success = overall_success,
+        message = overall_success and "All connectivity tests passed" or "Some connectivity tests failed",
+        results = results
+    }
+end
+
+-- Register the get_time tool with its implementation and schema for the LLM.
+registry.get_time = {
+    func = Tools.get_time,
+    schema = {
+        type = "function",
+        ["function"] = {
+            name = "get_time",
+            description = "Get the current in-game time.",
+            parameters = {
+                type = "object",
+                properties = {},
+                required = {},
+            },
+        },
+    },
+}
+
+-- Register the change_name tool
+registry.change_name = {
+    func = function(args)
+        local new_name = args and args.new_name
+        return Tools.change_name(new_name)
+    end,
+    schema = {
+        type = "function",
+        ["function"] = {
+            name = "change_name",
+            description = "Change the bot's name that it responds to.",
+            parameters = {
+                type = "object",
+                properties = {
+                    new_name = {
+                        type = "string",
+                        description = "The new name for the bot"
+                    }
+                },
+                required = {"new_name"},
+            },
+        },
+    },
+}
+
+-- Register the test_connection tool
+registry.test_connection = {
+    func = Tools.test_connection,
+    schema = {
+        type = "function",
+        ["function"] = {
+            name = "test_connection",
+            description = "Test HTTP connectivity to diagnose connection issues.",
+            parameters = {
+                type = "object",
+                properties = {},
+                required = {},
+            },
+        },
+    },
+}
+
+-- Tool Definition: get_time
+-- This function gets the current in-game time.
+function Tools.get_time()
+    return { time = textutils.formatTime(os.time("ingame"), false) }
+end
+
+-- Function to get all tool schemas to send to the LLM.
+function Tools.get_all_schemas()
+    local schemas = {}
+    for name, tool in pairs(registry) do
+        table.insert(schemas, tool.schema)
+    end
+    return schemas
+end
+
+-- Function to get a tool's implementation by name.
+function Tools.get_tool(name)
+    if registry[name] then
+        return registry[name].func
+    end
+    return nil
+end
+
+return Tools 
+]]
+files["programs/jarvis"] = [[
 -- Jarvis: Main Program
 -- An LLM-powered assistant for ComputerCraft.
 
@@ -154,186 +364,6 @@ end
 
 main() 
 ]]
-files["programs/lib/jarvis/tools.lua"] = [[
--- tools.lua
--- Defines the functions that the LLM can call.
-
-local Tools = {}
-
--- A registry to hold the function definitions and their callable implementations.
-local registry = {}
-
--- Bot name management
-local BOT_NAME_FILE = "/etc/jarvis/botname.txt"
-local DEFAULT_BOT_NAME = "jarvis"
-
--- Function to get the current bot name
-function Tools.get_bot_name()
-    if fs.exists(BOT_NAME_FILE) then
-        local file = fs.open(BOT_NAME_FILE, "r")
-        if file then
-            local name = file.readAll():gsub("%s+", ""):lower() -- trim whitespace and lowercase
-            file.close()
-            return name ~= "" and name or DEFAULT_BOT_NAME
-        end
-    end
-    return DEFAULT_BOT_NAME
-end
-
--- Function to set the bot name
-function Tools.set_bot_name(new_name)
-    if not new_name or new_name == "" then
-        return { success = false, message = "Name cannot be empty" }
-    end
-    
-    -- Ensure the directory exists
-    local dir = BOT_NAME_FILE:match("(.*)/")
-    if dir and not fs.exists(dir) then
-        fs.makeDir(dir)
-    end
-    
-    local file = fs.open(BOT_NAME_FILE, "w")
-    if file then
-        file.write(new_name:lower()) -- store in lowercase
-        file.close()
-        return { success = true, message = "Bot name changed to: " .. new_name }
-    else
-        return { success = false, message = "Failed to save name to file" }
-    end
-end
-
--- Function to check if a message is addressing the bot
-function Tools.is_message_for_bot(message)
-    local bot_name = Tools.get_bot_name()
-    local msg_lower = message:lower():gsub("^%s+", "") -- trim leading whitespace and lowercase
-    
-    -- Check if message starts with bot name followed by space, comma, colon, or question mark
-    return msg_lower:match("^" .. bot_name .. "[%s,:%?]") ~= nil
-end
-
--- Tool Definition: change_name
--- This function changes the bot's name.
-function Tools.change_name(new_name)
-    return Tools.set_bot_name(new_name)
-end
-
--- Tool Definition: test_connection
--- This function tests HTTP connectivity.
-function Tools.test_connection()
-    if not http then
-        return { success = false, error = "HTTP API is not available. Check computercraft-common.toml settings." }
-    end
-    
-    -- Test with a simple HTTP request
-    local test_url = "https://httpbin.org/get"
-    print("Testing HTTP connectivity to " .. test_url)
-    
-    local success, response = http.get(test_url)
-    if success then
-        local body = response.readAll()
-        response.close()
-        return { 
-            success = true, 
-            message = "HTTP connectivity is working", 
-            test_response_size = #body 
-        }
-    else
-        local error_msg = "HTTP test failed"
-        if response then
-            if type(response) == "string" then
-                error_msg = error_msg .. ": " .. response
-            else
-                error_msg = error_msg .. ": Unknown error"
-            end
-        end
-        return { success = false, error = error_msg }
-    end
-end
-
--- Register the get_time tool with its implementation and schema for the LLM.
-registry.get_time = {
-    func = Tools.get_time,
-    schema = {
-        type = "function",
-        ["function"] = {
-            name = "get_time",
-            description = "Get the current in-game time.",
-            parameters = {
-                type = "object",
-                properties = {},
-                required = {},
-            },
-        },
-    },
-}
-
--- Register the change_name tool
-registry.change_name = {
-    func = function(args)
-        local new_name = args and args.new_name
-        return Tools.change_name(new_name)
-    end,
-    schema = {
-        type = "function",
-        ["function"] = {
-            name = "change_name",
-            description = "Change the bot's name that it responds to.",
-            parameters = {
-                type = "object",
-                properties = {
-                    new_name = {
-                        type = "string",
-                        description = "The new name for the bot"
-                    }
-                },
-                required = {"new_name"},
-            },
-        },
-    },
-}
-
--- Register the test_connection tool
-registry.test_connection = {
-    func = Tools.test_connection,
-    schema = {
-        type = "function",
-        ["function"] = {
-            name = "test_connection",
-            description = "Test HTTP connectivity to diagnose connection issues.",
-            parameters = {
-                type = "object",
-                properties = {},
-                required = {},
-            },
-        },
-    },
-}
-
--- Tool Definition: get_time
--- This function gets the current in-game time.
-function Tools.get_time()
-    return { time = textutils.formatTime(os.time("ingame"), false) }
-end
-
--- Function to get all tool schemas to send to the LLM.
-function Tools.get_all_schemas()
-    local schemas = {}
-    for name, tool in pairs(registry) do
-        table.insert(schemas, tool.schema)
-    end
-    return schemas
-end
-
--- Function to get a tool's implementation by name.
-function Tools.get_tool(name)
-    if registry[name] then
-        return registry[name].func
-    end
-    return nil
-end
-
-return Tools 
-]]
 files["programs/lib/jarvis/llm.lua"] = [[
 -- llm.lua
 -- Handles communication with the OpenAI API.
@@ -342,8 +372,39 @@ local LLM = {}
 
 local API_URL = "https://api.openai.com/v1/chat/completions"
 
+-- Test basic connectivity to OpenAI
+function LLM.test_openai_connectivity()
+    print("[DEBUG] Testing basic connectivity to api.openai.com...")
+    
+    -- Try a simple GET request to OpenAI (this will return 404, but that's expected)
+    local success, response = http.get("https://api.openai.com/")
+    
+    if success then
+        local body = response.readAll()
+        response.close()
+        print("[DEBUG] OpenAI domain is reachable (got response)")
+        return true, "OpenAI domain reachable"
+    else
+        local err_msg = "Cannot reach OpenAI domain"
+        if response then
+            if type(response) == "string" then
+                err_msg = err_msg .. ": " .. response
+            end
+        end
+        print("[DEBUG] " .. err_msg)
+        return false, err_msg
+    end
+end
+
 function LLM.request(api_key, model, messages, tools)
     print("[DEBUG] Starting LLM request...")
+    print("[DEBUG] Target URL: " .. API_URL)
+    
+    -- Test connectivity first
+    local conn_ok, conn_msg = LLM.test_openai_connectivity()
+    if not conn_ok then
+        return false, "Connectivity test failed: " .. conn_msg
+    end
     
     -- Check if HTTP is enabled
     if not http then
@@ -381,64 +442,81 @@ function LLM.request(api_key, model, messages, tools)
     end
 
     print("[DEBUG] Serializing request body...")
-    local body_json = textutils.serialiseJSON(body)
+    -- Try both spellings of serialize in case one works better
+    local body_json
+    if textutils.serializeJSON then
+        body_json = textutils.serializeJSON(body)
+        print("[DEBUG] Used serializeJSON (American spelling)")
+    else
+        body_json = textutils.serialiseJSON(body)
+        print("[DEBUG] Used serialiseJSON (British spelling)")
+    end
+    
     print("[DEBUG] Request body serialized successfully")
     print("[DEBUG] Request size: " .. #body_json .. " bytes")
     
     -- Show first 200 chars of request for debugging
     print("[DEBUG] Request preview: " .. body_json:sub(1, 200) .. (#body_json > 200 and "..." or ""))
     
-    print("[DEBUG] Making HTTP POST request to: " .. API_URL)
-    local success, response = http.post(API_URL, body_json, headers)
-    print("[DEBUG] HTTP request completed. Success: " .. tostring(success))
-
-    if not success then
-        print("[DEBUG] HTTP request failed")
-        local err_msg = "HTTP request failed."
-        if response then
-            print("[DEBUG] Response type: " .. type(response))
-            if type(response) == "string" then
-                print("[DEBUG] Error response: " .. response)
-                err_msg = err_msg .. " Error: " .. response
-            elseif response.readAll then
-                local error_body = response.readAll()
-                print("[DEBUG] Error response body: " .. error_body)
-                err_msg = err_msg .. " Response: " .. error_body
-                response.close()
+    print("[DEBUG] Making async HTTP request to: " .. API_URL)
+    
+    -- Use async http.request like the working GPT.lua example
+    http.request(API_URL, body_json, headers)
+    
+    print("[DEBUG] HTTP request sent, waiting for response...")
+    
+    -- Wait for the response using event handling
+    while true do
+        local event, url, handle = os.pullEvent()
+        
+        if event == "http_success" then
+            print("[DEBUG] HTTP request successful, reading response...")
+            local response_body = handle.readAll()
+            handle.close()
+            print("[DEBUG] Response received: " .. #response_body .. " bytes")
+            
+            -- Show first 200 chars of response for debugging
+            print("[DEBUG] Response preview: " .. response_body:sub(1, 200) .. (#response_body > 200 and "..." or ""))
+            
+            print("[DEBUG] Parsing JSON response...")
+            local response_data
+            if textutils.unserializeJSON then
+                response_data = textutils.unserializeJSON(response_body)
+                print("[DEBUG] Used unserializeJSON (American spelling)")
             else
-                print("[DEBUG] Response object has no readAll method")
+                response_data = textutils.unserialiseJSON(response_body)
+                print("[DEBUG] Used unserialiseJSON (British spelling)")
             end
-        else
-            print("[DEBUG] No response object returned")
-            err_msg = err_msg .. " No response received. Check internet connection and HTTP settings."
+
+            if not response_data then
+                print("[DEBUG] Failed to parse JSON response")
+                return false, "Failed to decode JSON response from API: " .. tostring(response_body)
+            end
+            print("[DEBUG] JSON response parsed successfully")
+            
+            if response_data.error then
+                print("[DEBUG] API returned error: " .. response_data.error.message)
+                return false, "API Error: " .. response_data.error.message
+            end
+
+            print("[DEBUG] LLM request completed successfully")
+            return true, response_data
+            
+        elseif event == "http_failure" then
+            print("[DEBUG] HTTP request failed with http_failure event")
+            local error_msg = "HTTP request failed (http_failure event)"
+            if handle then
+                if type(handle) == "string" then
+                    error_msg = error_msg .. ": " .. handle
+                    print("[DEBUG] Error details: " .. handle)
+                end
+            end
+            return false, error_msg
         end
-        return false, err_msg
+        
+        -- Continue waiting for our specific request response
+        -- (other events might occur that we don't care about)
     end
-
-    print("[DEBUG] HTTP request successful, reading response...")
-    local response_body = response.readAll()
-    response.close()
-    print("[DEBUG] Response received: " .. #response_body .. " bytes")
-    
-    -- Show first 200 chars of response for debugging
-    print("[DEBUG] Response preview: " .. response_body:sub(1, 200) .. (#response_body > 200 and "..." or ""))
-    
-    print("[DEBUG] Parsing JSON response...")
-    local response_data = textutils.unserialiseJSON(response_body)
-
-    if not response_data then
-        print("[DEBUG] Failed to parse JSON response")
-        return false, "Failed to decode JSON response from API: " .. tostring(response_body)
-    end
-    print("[DEBUG] JSON response parsed successfully")
-    
-    if response_data.error then
-        print("[DEBUG] API returned error: " .. response_data.error.message)
-        return false, "API Error: " .. response_data.error.message
-    end
-
-    print("[DEBUG] LLM request completed successfully")
-    return true, response_data
 end
 
 return LLM 
