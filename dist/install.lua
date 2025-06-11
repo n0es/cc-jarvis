@@ -4,7 +4,7 @@
 local files = {}
 
 -- Packed files will be inserted here by the build script.
-files["lib/jarvis/tools.lua"] = [[
+files["programs/lib/jarvis/tools.lua"] = [[
 -- tools.lua
 -- Defines the functions that the LLM can call.
 
@@ -61,8 +61,8 @@ files["programs/jarvis"] = [[
 -- An LLM-powered assistant for ComputerCraft.
 
 -- Load modules
-local llm = require("jarvis.llm")
-local tools = require("jarvis.tools")
+local llm = require("lib.jarvis.llm")
+local tools = require("lib.jarvis.tools")
 
 -- Load config
 local CONFIG_PATH_LUA = "etc.jarvis.config"
@@ -192,7 +192,7 @@ end
 
 main() 
 ]]
-files["lib/jarvis/llm.lua"] = [[
+files["programs/lib/jarvis/llm.lua"] = [[
 -- llm.lua
 -- Handles communication with the OpenAI API.
 
@@ -249,7 +249,7 @@ local function install()
     print("Removing old version if it exists...")
     -- Delete the main program file and the library directory to ensure a clean install.
     local program_path = "programs/jarvis"
-    local lib_path = "lib/jarvis"
+    local lib_path = "programs/lib/jarvis"
     if fs.exists(program_path) then
         print("  Deleting " .. program_path)
         fs.delete(program_path)
