@@ -1,5 +1,6 @@
 import os
 import textwrap
+import re
 
 # --- Configuration ---
 # The directory containing the source Lua files.
@@ -90,10 +91,25 @@ INSTALLER_TEMPLATE = textwrap.dedent("""
 """)
 
 def pack_file_content(content):
-    """Escapes content to be safely embedded in a Lua string."""
-    # We need to escape backslashes and the closing sequence of the long bracket string.
-    escaped = content.replace('\\', '\\\\').replace(']]', ']].."]]"..[[')
-    return '[[' + escaped + ']]'
+    """
+    Packs content into a Lua long string, automatically handling nesting.
+    It finds the longest sequence of equals signs in any existing long bracket
+    sequences in the content and uses a level of equals signs that won't conflict.
+    """
+    # Find all occurrences of "[=[...[=" or "]=...]=]" to determine the required level of nesting.
+    all_brackets = re.findall(r"\[(=*)\[|\](=*)\]", content)
+    
+    max_len = -1
+    for group in all_brackets:
+        # group is a tuple, e.g., ('=', '') or ('', '=='). Get the one that matched.
+        matched_equals = group[0] if group[0] else group[1]
+        max_len = max(max_len, len(matched_equals))
+        
+    equals = "=" * (max_len + 1)
+    
+    # Prepending a newline is a good practice to handle content that starts
+    # with something that could be misinterpreted after the opening bracket.
+    return f"[{equals}[\n{content}\n]{equals}]"
 
 def main():
     """Main function to build the installer."""
