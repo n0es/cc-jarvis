@@ -4,7 +4,157 @@
     local files = {}
 
     -- Packed files will be inserted here by the build script.
-    files["programs/lib/jarvis/tools.lua"] = [[
+    files["programs/jarvis"] = [[
+-- Jarvis: Main Program
+-- An LLM-powered assistant for ComputerCraft.
+
+-- Load modules
+local llm = require("lib.jarvis.llm")
+local tools = require("lib.jarvis.tools")
+
+-- Load config
+local CONFIG_PATH_LUA = "etc.jarvis.config"
+local CONFIG_PATH_FS = "/etc/jarvis/config.lua"
+
+local config
+if fs.exists(CONFIG_PATH_FS) then
+    local config_func, err = loadfile(CONFIG_PATH_FS)
+    if config_func then
+        config = config_func()
+    else
+        error("Failed to load config file: " .. tostring(err), 0)
+    end
+else
+    local err_msg = table.concat({
+        "Could not load config from '" .. CONFIG_PATH_FS .. "'.",
+        "Please create this file and add your OpenAI API key.",
+        "",
+        "Example to paste into the new file:",
+        "--------------------------------------------------",
+        "local config = {}",
+        "",
+        '-- Your OpenAI API key from https://platform.openai.com/api-keys',
+        'config.openai_api_key = "YOUR_API_KEY_HERE"',
+        "",
+        '-- The model to use. "gpt-4o" is a good default.',
+        'config.model = "gpt-4o"',
+        "",
+        "return config",
+        "--------------------------------------------------"
+    }, "\n")
+    error(err_msg, 0)
+end
+
+if not config.openai_api_key or config.openai_api_key == "YOUR_API_KEY_HERE" then
+    error("API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
+end
+
+
+local function process_llm_response(response_data)
+    local message = response_data.choices[1].message
+    local finish_reason = response_data.choices[1].finish_reason
+
+    if finish_reason == "tool_calls" then
+        -- The model wants to call one or more tools.
+        local tool_calls = message.tool_calls
+        local tool_outputs = {}
+
+        for _, tool_call in ipairs(tool_calls) do
+            local func_name = tool_call["function"]["name"]
+            local func_args_json = tool_call["function"]["arguments"]
+            
+            print("LLM wants to call tool: " .. func_name)
+            local tool_func = tools.get_tool(func_name)
+
+            if tool_func then
+                local args = nil
+                if func_args_json and func_args_json ~= "" and func_args_json ~= "{}" then
+                    args = textutils.unserialiseJSON(func_args_json)
+                end
+                
+                local result = tool_func(args)
+                
+                table.insert(tool_outputs, {
+                    tool_call_id = tool_call.id,
+                    role = "tool",
+                    name = func_name,
+                    content = textutils.serialiseJSON(result),
+                })
+            end
+        end
+        return tool_outputs
+    end
+
+    -- If it's not a tool call, it's a regular message for the user.
+    return message.content
+end
+
+
+local function main()
+    local chatBox = peripheral.find("chatBox")
+    if not chatBox then
+        error("Could not find a 'chatBox' peripheral. Please place one next to the computer.", 0)
+    end
+
+    print("Jarvis is online. Waiting for messages.")
+    print("Current bot name: " .. tools.get_bot_name())
+
+    local messages = {
+        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Only respond when someone addresses you by name." }
+    }
+    local tool_schemas = tools.get_all_schemas()
+
+    while true do
+        local _, player, message_text = os.pullEvent("chat")
+
+        -- Only respond if the message is addressed to the bot
+        if tools.is_message_for_bot(message_text) then
+            print(player .. " says: " .. message_text)
+            table.insert(messages, { role = "user", content = message_text })
+
+            -- Call the LLM
+            chatBox.sendMessageToPlayer("Thinking...", player)
+            local ok, response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
+
+            if not ok then
+                printError("LLM Request Failed: " .. tostring(response))
+                chatBox.sendMessageToPlayer("Sorry, I encountered an error.", player)
+                table.remove(messages) -- Remove the failed user message
+                goto continue
+            end
+
+            local result = process_llm_response(response)
+
+            if type(result) == "table" then
+                -- The LLM called a tool, so we add its output to the conversation and run again.
+                for _, tool_output in ipairs(result) do
+                    table.insert(messages, tool_output)
+                end
+                
+                local final_ok, final_response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
+                if final_ok then
+                    local final_message = final_response.choices[1].message.content
+                    chatBox.sendMessageToPlayer(final_message, player)
+                    table.insert(messages, { role = "assistant", content = final_message })
+                else
+                    printError("Second LLM Request Failed: " .. tostring(final_response))
+                    chatBox.sendMessageToPlayer("Sorry, I encountered an error after using my tool.", player)
+                end
+
+            elseif type(result) == "string" then
+                -- The LLM returned a direct message.
+                chatBox.sendMessageToPlayer(result, player)
+                table.insert(messages, { role = "assistant", content = result })
+            end
+
+            ::continue::
+        end
+    end
+end
+
+main() 
+]]
+files["programs/lib/jarvis/tools.lua"] = [[
 -- tools.lua
 -- Defines the functions that the LLM can call.
 
@@ -214,156 +364,6 @@ end
 
 return Tools 
 ]]
-files["programs/jarvis"] = [[
--- Jarvis: Main Program
--- An LLM-powered assistant for ComputerCraft.
-
--- Load modules
-local llm = require("lib.jarvis.llm")
-local tools = require("lib.jarvis.tools")
-
--- Load config
-local CONFIG_PATH_LUA = "etc.jarvis.config"
-local CONFIG_PATH_FS = "/etc/jarvis/config.lua"
-
-local config
-if fs.exists(CONFIG_PATH_FS) then
-    local config_func, err = loadfile(CONFIG_PATH_FS)
-    if config_func then
-        config = config_func()
-    else
-        error("Failed to load config file: " .. tostring(err), 0)
-    end
-else
-    local err_msg = table.concat({
-        "Could not load config from '" .. CONFIG_PATH_FS .. "'.",
-        "Please create this file and add your OpenAI API key.",
-        "",
-        "Example to paste into the new file:",
-        "--------------------------------------------------",
-        "local config = {}",
-        "",
-        '-- Your OpenAI API key from https://platform.openai.com/api-keys',
-        'config.openai_api_key = "YOUR_API_KEY_HERE"',
-        "",
-        '-- The model to use. "gpt-4o" is a good default.',
-        'config.model = "gpt-4o"',
-        "",
-        "return config",
-        "--------------------------------------------------"
-    }, "\n")
-    error(err_msg, 0)
-end
-
-if not config.openai_api_key or config.openai_api_key == "YOUR_API_KEY_HERE" then
-    error("API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
-end
-
-
-local function process_llm_response(response_data)
-    local message = response_data.choices[1].message
-    local finish_reason = response_data.choices[1].finish_reason
-
-    if finish_reason == "tool_calls" then
-        -- The model wants to call one or more tools.
-        local tool_calls = message.tool_calls
-        local tool_outputs = {}
-
-        for _, tool_call in ipairs(tool_calls) do
-            local func_name = tool_call["function"]["name"]
-            local func_args_json = tool_call["function"]["arguments"]
-            
-            print("LLM wants to call tool: " .. func_name)
-            local tool_func = tools.get_tool(func_name)
-
-            if tool_func then
-                local args = nil
-                if func_args_json and func_args_json ~= "" and func_args_json ~= "{}" then
-                    args = textutils.unserialiseJSON(func_args_json)
-                end
-                
-                local result = tool_func(args)
-                
-                table.insert(tool_outputs, {
-                    tool_call_id = tool_call.id,
-                    role = "tool",
-                    name = func_name,
-                    content = textutils.serialiseJSON(result),
-                })
-            end
-        end
-        return tool_outputs
-    end
-
-    -- If it's not a tool call, it's a regular message for the user.
-    return message.content
-end
-
-
-local function main()
-    local chatBox = peripheral.find("chatBox")
-    if not chatBox then
-        error("Could not find a 'chatBox' peripheral. Please place one next to the computer.", 0)
-    end
-
-    print("Jarvis is online. Waiting for messages.")
-    print("Current bot name: " .. tools.get_bot_name())
-
-    local messages = {
-        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Only respond when someone addresses you by name." }
-    }
-    local tool_schemas = tools.get_all_schemas()
-
-    while true do
-        local _, player, message_text = os.pullEvent("chat")
-
-        -- Only respond if the message is addressed to the bot
-        if tools.is_message_for_bot(message_text) then
-            print(player .. " says: " .. message_text)
-            table.insert(messages, { role = "user", content = message_text })
-
-            -- Call the LLM
-            chatBox.sendMessageToPlayer("Thinking...", player)
-            local ok, response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
-
-            if not ok then
-                printError("LLM Request Failed: " .. tostring(response))
-                chatBox.sendMessageToPlayer("Sorry, I encountered an error.", player)
-                table.remove(messages) -- Remove the failed user message
-                goto continue
-            end
-
-            local result = process_llm_response(response)
-
-            if type(result) == "table" then
-                -- The LLM called a tool, so we add its output to the conversation and run again.
-                for _, tool_output in ipairs(result) do
-                    table.insert(messages, tool_output)
-                end
-                
-                local final_ok, final_response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
-                if final_ok then
-                    local final_message = final_response.choices[1].message.content
-                    chatBox.sendMessageToPlayer(final_message, player)
-                    table.insert(messages, { role = "assistant", content = final_message })
-                else
-                    printError("Second LLM Request Failed: " .. tostring(final_response))
-                    chatBox.sendMessageToPlayer("Sorry, I encountered an error after using my tool.", player)
-                end
-
-            elseif type(result) == "string" then
-                -- The LLM returned a direct message.
-                chatBox.sendMessageToPlayer(result, player)
-                table.insert(messages, { role = "assistant", content = result })
-            end
-
-            ::continue::
-        end
-    end
-end
-
-main() 
-]]
 files["programs/lib/jarvis/llm.lua"] = [[
 -- llm.lua
 -- Handles communication with the OpenAI API.
@@ -376,19 +376,26 @@ local API_URL = "https://api.openai.com/v1/chat/completions"
 function LLM.test_openai_connectivity()
     print("[DEBUG] Testing basic connectivity to api.openai.com...")
     
-    -- Try a simple GET request to OpenAI (this will return 404, but that's expected)
-    local success, response = http.get("https://api.openai.com/")
+    -- Try a simpler test - just check if we can resolve the domain
+    -- Instead of hitting the root, try a known endpoint that should return a proper error
+    local test_headers = {
+        ["User-Agent"] = "ComputerCraft",
+    }
+    
+    print("[DEBUG] Attempting simple connectivity test...")
+    local success, response = http.get("https://api.openai.com/v1/models", test_headers)
     
     if success then
         local body = response.readAll()
         response.close()
-        print("[DEBUG] OpenAI domain is reachable (got response)")
-        return true, "OpenAI domain reachable"
+        print("[DEBUG] OpenAI API is reachable (got response from /v1/models)")
+        return true, "OpenAI API reachable"
     else
-        local err_msg = "Cannot reach OpenAI domain"
+        local err_msg = "Cannot reach OpenAI API"
         if response then
             if type(response) == "string" then
                 err_msg = err_msg .. ": " .. response
+                print("[DEBUG] Error: " .. response)
             end
         end
         print("[DEBUG] " .. err_msg)
@@ -400,35 +407,39 @@ function LLM.request(api_key, model, messages, tools)
     print("[DEBUG] Starting LLM request...")
     print("[DEBUG] Target URL: " .. API_URL)
     
-    -- Test connectivity first
-    local conn_ok, conn_msg = LLM.test_openai_connectivity()
-    if not conn_ok then
-        return false, "Connectivity test failed: " .. conn_msg
-    end
-    
-    -- Check if HTTP is enabled
+    -- Check if HTTP is enabled first
     if not http then
         print("[DEBUG] HTTP API not available")
         return false, "HTTP API is not available. Ensure 'http_enable' is set to true in computercraft-common.toml"
     end
     print("[DEBUG] HTTP API is available")
     
+    -- Test connectivity 
+    local conn_ok, conn_msg = LLM.test_openai_connectivity()
+    if not conn_ok then
+        -- Don't fail completely on connectivity test - sometimes the test endpoint fails but the real API works
+        print("[DEBUG] Connectivity test failed but continuing anyway: " .. conn_msg)
+    end
+    
     -- Debug API key (show first/last 4 chars only for security)
     if api_key and #api_key > 8 then
         print("[DEBUG] API key format: " .. api_key:sub(1,4) .. "..." .. api_key:sub(-4))
     else
         print("[DEBUG] API key appears invalid or too short")
+        return false, "Invalid API key format"
     end
     
     print("[DEBUG] Model: " .. tostring(model))
     print("[DEBUG] Messages count: " .. #messages)
     print("[DEBUG] Tools count: " .. (tools and #tools or 0))
     
+    -- Add User-Agent header to avoid issues
     local headers = {
         ["Content-Type"] = "application/json",
         ["Authorization"] = "Bearer " .. api_key,
+        ["User-Agent"] = "ComputerCraft-Jarvis/1.0",
     }
-    print("[DEBUG] Headers prepared")
+    print("[DEBUG] Headers prepared with User-Agent")
 
     local body = {
         model = model,
@@ -454,6 +465,11 @@ function LLM.request(api_key, model, messages, tools)
     
     print("[DEBUG] Request body serialized successfully")
     print("[DEBUG] Request size: " .. #body_json .. " bytes")
+    
+    -- Validate JSON before sending
+    if not body_json or body_json == "" then
+        return false, "Failed to serialize request body to JSON"
+    end
     
     -- Show first 200 chars of request for debugging
     print("[DEBUG] Request preview: " .. body_json:sub(1, 200) .. (#body_json > 200 and "..." or ""))
