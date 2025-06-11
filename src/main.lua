@@ -46,8 +46,8 @@ local function process_llm_response(response_data)
         local tool_outputs = {}
 
         for _, tool_call in ipairs(tool_calls) do
-            local func_name = tool_call.function.name
-            local func_args_json = tool_call.function.arguments
+            local func_name = tool_call["function"]["name"]
+            local func_args_json = tool_call["function"]["arguments"]
             
             print("LLM wants to call tool: " .. func_name)
             local tool_func = tools.get_tool(func_name)
