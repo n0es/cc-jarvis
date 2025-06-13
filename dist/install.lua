@@ -197,6 +197,7 @@ local function initialize()
         debug.warn("Modem not found. Door control and other modem-based tools will be unavailable.")
     end
     tools.set_modem(modem, modem_channel)
+    tools.init() -- Initialize all available tools
 
     -- Initialize chatbox queue
     chatbox_queue.init(config.chat_delay or 1)
@@ -2312,7 +2313,7 @@ return config
 
         print([[
 
-    Installation complete! Build #80 (2025-06-13 21:33:43 UTC)
+    Installation complete! Build #81 (2025-06-13 21:58:59 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
