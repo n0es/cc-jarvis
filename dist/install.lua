@@ -310,7 +310,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #74 (2025-06-13 09:55:10 UTC)")
+    debug.info("Build: #75 (2025-06-13 10:03:41 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -1842,7 +1842,7 @@ function GeminiProvider:request(api_key, model, messages, tools)
     local body = {
         contents = contents,
         generationConfig = {
-            temperature = 1,
+            temperature = 0.2,
             topP = 0.95,
             topK = 64,
             maxOutputTokens = 8192
@@ -1864,7 +1864,7 @@ function GeminiProvider:request(api_key, model, messages, tools)
         }
         body.toolConfig = {
             functionCallingConfig = {
-                mode = "ANY"
+                mode = "AUTO" -- AUTO lets the model decide, ANY forces a tool call
             }
         }
         debug.debug("Added " .. #function_declarations .. " function declarations")
@@ -2494,7 +2494,7 @@ return config
 
         print([[
 
-    Installation complete! Build #74 (2025-06-13 09:55:10 UTC)
+    Installation complete! Build #75 (2025-06-13 10:03:41 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
