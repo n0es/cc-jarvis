@@ -245,8 +245,9 @@ local function main()
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
     }
-    -- Get available tool schemas for the LLM
-    local tool_schemas = tools.get_all_schemas()
+    -- Get available tool schemas for the LLM  
+    -- Temporarily disable tools to debug the format issue
+    local tool_schemas = {} -- tools.get_all_schemas()
 
     -- Time-based context and listening mode variables
     local CONTEXT_TIMEOUT = 5 * 60 * 20  -- 5 minutes in ticks (20 ticks per second)
