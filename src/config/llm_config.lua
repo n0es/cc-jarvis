@@ -19,19 +19,27 @@ local current_config = {}
 
 -- Configuration file path
 local CONFIG_FILE = "/etc/jarvis/llm_config.lua"
-local CONFIG_MODULE = "etc.jarvis.llm_config"
 
 -- Load configuration from file
 function LLMConfig.load_config()
-    -- Try to load from file using require
-    local success, loaded_config = pcall(require, CONFIG_MODULE)
-    if success and loaded_config and type(loaded_config) == "table" then
-        -- Merge with defaults
-        current_config = {}
-        for k, v in pairs(default_config) do
-            current_config[k] = loaded_config[k] or v
+    -- Try to load from file using loadfile (same pattern as main config)
+    if fs.exists(CONFIG_FILE) then
+        local config_func, err = loadfile(CONFIG_FILE)
+        if config_func then
+            local loaded_config = config_func()
+            if loaded_config and type(loaded_config) == "table" then
+                -- Merge with defaults
+                current_config = {}
+                for k, v in pairs(default_config) do
+                    current_config[k] = loaded_config[k] or v
+                end
+                return true, "Configuration loaded successfully"
+            else
+                debug.error("LLM config file did not return a valid table")
+            end
+        else
+            debug.error("Failed to load LLM config file: " .. tostring(err))
         end
-        return true, "Configuration loaded successfully"
     end
     
     -- Fall back to defaults
@@ -78,9 +86,6 @@ function LLMConfig.save_config()
     if file then
         file.write(table.concat(config_lines, "\n"))
         file.close()
-        
-        -- Clear the require cache so changes take effect immediately
-        package.loaded[CONFIG_MODULE] = nil
         
         return true, "Configuration saved successfully"
     end
