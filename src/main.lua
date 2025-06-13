@@ -49,35 +49,40 @@ end
 
 -- Extract response content and metadata from the new API format
 local function extract_response_data(response_data)
-    -- Based on the actual response structure: response.output[0].content[0].text
+    -- Handle the new API format where function calls are in response.output directly
     if response_data.output and type(response_data.output) == "table" and #response_data.output > 0 then
-        local message = response_data.output[1]
-        if message.content and type(message.content) == "table" and #message.content > 0 then
-            local result = {
-                id = message.id,
-                tool_calls = {},
-                content = nil
-            }
-            
-            -- Process all content items
-            for _, content_obj in ipairs(message.content) do
-                if content_obj.type == "output_text" and content_obj.text then
-                    result.content = content_obj.text
-                elseif content_obj.type == "function_call" then
-                    -- Handle tool/function calls in the new format
-                    table.insert(result.tool_calls, {
-                        id = content_obj.id or ("call_" .. os.epoch("utc") .. math.random(1000, 9999)),
-                        type = "function",
-                        ["function"] = {
-                            name = content_obj.name,
-                            arguments = content_obj.parameters and textutils.serializeJSON(content_obj.parameters) or "{}"
-                        }
-                    })
+        local result = {
+            id = nil, -- Function calls don't have a single message ID
+            tool_calls = {},
+            content = nil
+        }
+        
+        -- Process all output items
+        for _, output_item in ipairs(response_data.output) do
+            if output_item.type == "message" then
+                -- This is a text message
+                result.id = output_item.id
+                if output_item.content and type(output_item.content) == "table" and #output_item.content > 0 then
+                    for _, content_obj in ipairs(output_item.content) do
+                        if content_obj.type == "output_text" and content_obj.text then
+                            result.content = content_obj.text
+                        end
+                    end
                 end
+            elseif output_item.type == "function_call" then
+                -- This is a function call in the new format
+                table.insert(result.tool_calls, {
+                    id = output_item.call_id or output_item.id or ("call_" .. os.epoch("utc") .. math.random(1000, 9999)),
+                    type = "function",
+                    ["function"] = {
+                        name = output_item.name,
+                        arguments = output_item.arguments or "{}"
+                    }
+                })
             end
-            
-            return result
         end
+        
+        return result
     end
     
     -- Fallback to standard OpenAI format if available
