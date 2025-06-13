@@ -259,7 +259,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #54 (2025-06-13 07:17:02 UTC)")
+    debug.info("Build: #55 (2025-06-13 07:21:00 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -291,7 +291,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #54 built on 2025-06-13 07:17:02 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #55 built on 2025-06-13 07:21:00 UTC]" }
             }
             return true
         end
@@ -1206,19 +1206,27 @@ local current_config = {}
 
 -- Configuration file path
 local CONFIG_FILE = "/etc/jarvis/llm_config.lua"
-local CONFIG_MODULE = "etc.jarvis.llm_config"
 
 -- Load configuration from file
 function LLMConfig.load_config()
-    -- Try to load from file using require
-    local success, loaded_config = pcall(require, CONFIG_MODULE)
-    if success and loaded_config and type(loaded_config) == "table" then
-        -- Merge with defaults
-        current_config = {}
-        for k, v in pairs(default_config) do
-            current_config[k] = loaded_config[k] or v
+    -- Try to load from file using loadfile (same pattern as main config)
+    if fs.exists(CONFIG_FILE) then
+        local config_func, err = loadfile(CONFIG_FILE)
+        if config_func then
+            local loaded_config = config_func()
+            if loaded_config and type(loaded_config) == "table" then
+                -- Merge with defaults
+                current_config = {}
+                for k, v in pairs(default_config) do
+                    current_config[k] = loaded_config[k] or v
+                end
+                return true, "Configuration loaded successfully"
+            else
+                debug.error("LLM config file did not return a valid table")
+            end
+        else
+            debug.error("Failed to load LLM config file: " .. tostring(err))
         end
-        return true, "Configuration loaded successfully"
     end
     
     -- Fall back to defaults
@@ -1265,9 +1273,6 @@ function LLMConfig.save_config()
     if file then
         file.write(table.concat(config_lines, "\n"))
         file.close()
-        
-        -- Clear the require cache so changes take effect immediately
-        package.loaded[CONFIG_MODULE] = nil
         
         return true, "Configuration saved successfully"
     end
@@ -1891,7 +1896,7 @@ return config
 
         print([[
 
-    Installation complete! Build #54 (2025-06-13 07:17:02 UTC)
+    Installation complete! Build #55 (2025-06-13 07:21:00 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
 
