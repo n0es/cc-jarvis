@@ -48,4 +48,36 @@ function BaseProvider:validate_request(api_key, model, messages)
     return true, nil
 end
 
+-- Default implementation for processing a response.
+-- This can be overridden by specific providers for custom handling.
+function BaseProvider:process_response(response_data)
+    local results = {}
+    
+    -- OpenAI-specific logic (default)
+    if response_data and response_data.choices and #response_data.choices > 0 then
+        local choice = response_data.choices[1]
+        if choice.message then
+            if choice.message.content then
+                table.insert(results, { type = "message", content = choice.message.content })
+            end
+            if choice.message.tool_calls and #choice.message.tool_calls > 0 then
+                for _, tool_call in ipairs(choice.message.tool_calls) do
+                    if tool_call.type == "function" then
+                        table.insert(results, {
+                            type = "tool_call",
+                            tool_name = tool_call.function.name,
+                            tool_args_json = tool_call.function.arguments
+                        })
+                    end
+                end
+            end
+        end
+    else
+        debug.error("Invalid or empty response structure from LLM")
+        table.insert(results, { type = "error", content = "Invalid response from API" })
+    end
+    
+    return results
+end
+
 return BaseProvider 

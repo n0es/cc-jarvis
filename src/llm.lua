@@ -27,7 +27,13 @@ function LLM.request(api_key, model, messages, tools)
     debug.info("Using provider: " .. provider_type)
     
     local provider = ProviderFactory.create_provider(provider_type)
-    return provider:request(api_key, model, messages, tools)
+    local success, response_data = provider:request(api_key, model, messages, tools)
+
+    if success then
+        return true, provider:process_response(response_data)
+    else
+        return false, response_data
+    end
 end
 
 -- Make a request with a specific provider (overrides config)
@@ -39,7 +45,13 @@ function LLM.request_with_provider(provider_type, api_key, model, messages, tool
     end
     
     local provider = ProviderFactory.create_provider(provider_type)
-    return provider:request(api_key, model, messages, tools)
+    local success, response_data = provider:request(api_key, model, messages, tools)
+    
+    if success then
+        return true, provider:process_response(response_data)
+    else
+        return false, response_data
+    end
 end
 
 -- Configuration management functions
