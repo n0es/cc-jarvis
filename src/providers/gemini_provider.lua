@@ -51,18 +51,19 @@ end
 -- Convert OpenAI-style messages to Gemini contents format
 local function convert_messages_to_contents(messages)
     local contents = {}
+    local system_instruction = nil
     
     for _, message in ipairs(messages) do
         if message.role == "system" then
-            -- System messages become user messages with clear indication
-            table.insert(contents, {
+            -- Extract system instruction separately
+            system_instruction = {
                 role = "user",
                 parts = {
                     {
-                        text = "System instructions: " .. (message.content or "")
+                        text = message.content or ""
                     }
                 }
-            })
+            }
         elseif message.role == "user" then
             table.insert(contents, {
                 role = "user",
@@ -94,7 +95,39 @@ local function convert_messages_to_contents(messages)
         end
     end
     
-    return contents
+    return contents, system_instruction
+end
+
+-- Convert OpenAI tools to Gemini function declarations
+local function convert_tools_to_function_declarations(tools)
+    if not tools or #tools == 0 then
+        return nil
+    end
+    
+    local function_declarations = {}
+    
+    for _, tool in ipairs(tools) do
+        if tool.type == "function" and tool["function"] then
+            local func_def = tool["function"]
+            local declaration = {
+                name = func_def.name,
+                description = func_def.description
+            }
+            
+            -- Convert parameters if they exist
+            if func_def.parameters then
+                declaration.parameters = {
+                    type = func_def.parameters.type or "object",
+                    properties = func_def.parameters.properties or {},
+                    required = func_def.parameters.required or {}
+                }
+            end
+            
+            table.insert(function_declarations, declaration)
+        end
+    end
+    
+    return function_declarations
 end
 
 function GeminiProvider:request(api_key, model, messages, tools)
@@ -130,24 +163,41 @@ function GeminiProvider:request(api_key, model, messages, tools)
     debug.debug("Headers prepared")
 
     -- Convert messages to Gemini contents format
-    local contents = convert_messages_to_contents(messages)
+    local contents, system_instruction = convert_messages_to_contents(messages)
     
-    -- Build Gemini request body - match Google's format
+    -- Build Gemini request body - match Google's format exactly
     local body = {
         contents = contents,
         generationConfig = {
+            temperature = 1,
+            topP = 0.95,
+            topK = 64,
+            maxOutputTokens = 8192,
             responseMimeType = "text/plain"
         }
     }
     
+    -- Add system instruction if present
+    if system_instruction then
+        body.systemInstruction = system_instruction
+    end
+    
     -- Add function calling support if tools are provided
-    if tools and #tools > 0 then
+    local function_declarations = convert_tools_to_function_declarations(tools)
+    if function_declarations and #function_declarations > 0 then
         body.tools = {
             {
-                function_declarations = tools
+                functionDeclarations = function_declarations
             }
         }
-        debug.debug("Added " .. #tools .. " function declarations")
+        body.toolConfig = {
+            functionCallingConfig = {
+                mode = "ANY"
+            }
+        }
+        debug.debug("Added " .. #function_declarations .. " function declarations")
+    else
+        debug.debug("No tools provided or conversion failed")
     end
 
     debug.debug("Serializing request body...")
