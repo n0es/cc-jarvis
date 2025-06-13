@@ -214,6 +214,15 @@ local function process_llm_response(response_data)
                     debug.info("Tool " .. function_name .. " executed successfully")
                     debug.debug("Tool result: " .. result_text)
                     
+                    -- Check if personality was changed and update system prompt
+                    if function_name == "change_personality" then
+                        debug.info("Personality changed, updating system prompt in history...")
+                        if #messages > 0 and messages[1].role == "system" then
+                            messages[1].content = llm.get_system_prompt(tools.get_bot_name())
+                            debug.info("System prompt updated to: " .. llm.get_current_personality())
+                        end
+                    end
+
                     table.insert(tool_results, {
                         tool_call_id = tool_call.id,
                         role = "tool",
