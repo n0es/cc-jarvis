@@ -57,7 +57,6 @@ local function convert_messages_to_contents(messages)
         if message.role == "system" then
             -- Extract system instruction separately
             system_instruction = {
-                role = "user",
                 parts = {
                     {
                         text = message.content or ""
