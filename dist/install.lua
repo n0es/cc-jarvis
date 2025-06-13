@@ -259,7 +259,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #52 (2025-06-13 07:03:56 UTC)")
+    debug.info("Build: #53 (2025-06-13 07:08:45 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -291,7 +291,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #52 built on 2025-06-13 07:03:56 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #53 built on 2025-06-13 07:08:45 UTC]" }
             }
             return true
         end
@@ -649,6 +649,43 @@ end
 
 return Debug 
 ]]
+files["programs/lib/jarvis/install_llm.lua"] = [[
+-- install_llm.lua
+-- Installation script for the LLM provider system
+
+print("===== LLM Provider System Installation =====")
+print()
+
+-- Load the LLM module
+local LLM = require("llm")
+
+-- Run the installation process
+print("Installing LLM configuration system...")
+local success, message = LLM.install()
+
+print()
+if success then
+    print("✓ LLM system installed successfully!")
+    print("✓ You can now use the LLM system with provider switching.")
+    print()
+    print("Quick start commands:")
+    print("  LLM.get_current_provider()     -- Check current provider")
+    print("  LLM.get_available_providers()  -- List available providers")
+    print("  LLM.set_provider('provider')   -- Switch providers")
+    print("  LLM.print_config()             -- Show current config")
+    print()
+    print("Test your setup with: lua src/test_providers.lua")
+else
+    print("! Installation completed with warnings:")
+    print("! " .. message)
+    print("! The system will still work but configuration may not persist.")
+end
+
+print()
+print("===== Installation Complete =====")
+
+return success 
+]]
 files["programs/lib/jarvis/tools.lua"] = [[
 -- tools.lua
 -- Defines the functions that the LLM can call.
@@ -996,6 +1033,11 @@ function LLM.reset_config()
     return LLMConfig.reset_to_defaults()
 end
 
+-- Install/initialize the LLM system (creates default config if needed)
+function LLM.install()
+    return LLMConfig.install()
+end
+
 return LLM 
 ]]
 files["programs/lib/jarvis/chatbox_queue.lua"] = [[
@@ -1105,6 +1147,16 @@ local LLM = require("llm")
 
 print("===== LLM Provider System Test =====")
 print()
+
+-- Check if configuration exists, install if needed
+if not fs.exists("config/llm_settings.json") then
+    print("Configuration file not found. Running install...")
+    LLM.install()
+    print()
+else
+    print("Configuration file found.")
+    print()
+end
 
 -- Show current configuration
 print("Current Configuration:")
@@ -1227,13 +1279,19 @@ function LLMConfig.load_config()
         end
     end
     
-    -- Fall back to defaults
+    -- Fall back to defaults and create default config file
     current_config = {}
     for k, v in pairs(default_config) do
         current_config[k] = v
     end
     
-    return false, "Using default configuration"
+    -- Create default configuration file during install/first run
+    local save_success, save_message = LLMConfig.save_config()
+    if save_success then
+        return true, "Default configuration created successfully"
+    else
+        return false, "Using default configuration (could not save: " .. save_message .. ")"
+    end
 end
 
 -- Save configuration to file
@@ -1312,6 +1370,27 @@ function LLMConfig.print_config()
     end
     print("========================")
     print("Available providers: " .. table.concat(LLMConfig.get_available_providers(), ", "))
+end
+
+-- Install/initialize the configuration system
+function LLMConfig.install()
+    -- Force a fresh load which will create defaults if needed
+    current_config = {}
+    local success, message = LLMConfig.load_config()
+    
+    print("LLM Configuration Install:")
+    print("=========================")
+    if success then
+        print("✓ " .. message)
+        print("✓ Configuration file: " .. CONFIG_FILE)
+    else
+        print("! " .. message)
+    end
+    
+    -- Show the configuration
+    LLMConfig.print_config()
+    
+    return success, message
 end
 
 -- Initialize configuration on load
@@ -1827,7 +1906,7 @@ return config
 
         print([[
 
-    Installation complete! Build #52 (2025-06-13 07:03:56 UTC)
+    Installation complete! Build #53 (2025-06-13 07:08:45 UTC)
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
     Reboot the computer to start Jarvis automatically.
     Or, to run Jarvis now, execute: 'programs/jarvis'
