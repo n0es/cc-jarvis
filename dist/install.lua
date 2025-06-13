@@ -12,6 +12,7 @@
 local llm = require("lib.jarvis.llm")
 local tools = require("lib.jarvis.tools")
 local chatbox_queue = require("lib.jarvis.chatbox_queue")
+local debug = require("debug")
 
 -- Load config
 local CONFIG_PATH_LUA = "etc.jarvis.config"
@@ -76,15 +77,15 @@ end
 
 local function process_llm_response(response_data)
     -- Try to extract content using the new format
-    print("[DEBUG] Processing LLM response...")
+    debug.debug("Processing LLM response...")
     local content = extract_response_content(response_data)
     if content then
-        print("[DEBUG] Successfully extracted content: " .. content)
+        debug.debug("Successfully extracted content: " .. content)
         return content
     end
     
     -- If we can't extract content, return an error message
-    print("[DEBUG] Failed to extract content from response")
+    debug.error("Failed to extract content from response")
     return "I received a response but couldn't parse it properly."
 end
 
@@ -101,8 +102,8 @@ local function main()
     -- Create a simple chat interface
     local chat = chatbox_queue.chat
 
-    print("Jarvis is online. Waiting for messages.")
-    print("Current bot name: " .. tools.get_bot_name())
+    debug.info("Jarvis is online. Waiting for messages.")
+    debug.info("Current bot name: " .. tools.get_bot_name())
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -128,7 +129,7 @@ local function main()
     local function check_context_timeout()
         local current_time = os.clock() * 20
         if current_time - last_message_time > CONTEXT_TIMEOUT then
-            print("[INFO] Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
+            debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
                 { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -145,20 +146,20 @@ local function main()
         -- Check if listen mode has expired
         if in_listen_mode and current_time > listen_mode_end_time then
             in_listen_mode = false
-            print("[INFO] Listen mode ended")
+            debug.info("Listen mode ended")
         end
         
         -- If bot is mentioned, enter listen mode
         if is_bot_mentioned(message) then
             in_listen_mode = true
             listen_mode_end_time = current_time + LISTEN_MODE_TIMEOUT
-            print("[INFO] Bot mentioned - entering listen mode for " .. LISTEN_MODE_TIMEOUT / 20 / 60 .. " minutes")
+            debug.info("Bot mentioned - entering listen mode for " .. LISTEN_MODE_TIMEOUT / 20 / 60 .. " minutes")
             return true
         end
         
         -- If in listen mode, listen to all messages
         if in_listen_mode then
-            print("[INFO] Listening due to active listen mode")
+            debug.debug("Listening due to active listen mode")
             return true
         end
         
@@ -178,7 +179,7 @@ local function main()
         -- Show queue status if there are messages waiting
         local queue_size = chatbox_queue.getQueueSize()
         if queue_size > 0 then
-            print("[DEBUG] Messages in queue: " .. queue_size)
+            debug.debug("Messages in queue: " .. queue_size)
         end
         
         -- Use timer-based event handling for proper timeout support
@@ -198,7 +199,7 @@ local function main()
 
             -- Check if we should respond to this message
             if should_listen_to_message(message_text) then
-                print(player .. " says: " .. message_text)
+                debug.info(player .. " says: " .. message_text)
                 
                 -- Update last message time
                 last_message_time = current_time
@@ -212,7 +213,7 @@ local function main()
                 
                 -- If LLM is currently processing, cancel it and restart with all pending messages
                 if llm_request_active then
-                    print("[INFO] New message received while processing. Cancelling current request...")
+                    debug.warn("New message received while processing. Cancelling current request...")
                     llm_request_active = false
                     -- Note: We can't actually cancel HTTP requests in ComputerCraft, 
                     -- but we'll ignore the response when it comes back
@@ -232,7 +233,7 @@ local function main()
                     -- Start LLM request
                     llm_request_active = true
                     llm_request_start_time = current_time
-                    print("Thinking...")
+                    debug.info("Thinking...")
                     
                     -- Use parallel.waitForAny to handle the LLM request with timeout
                     local function llm_task()
@@ -272,9 +273,9 @@ local function main()
 
                     -- Process response using the new format
                     local result = process_llm_response(response)
-                    print("[DEBUG] About to send message to chat: " .. tostring(result))
+                    debug.debug("About to send message to chat: " .. tostring(result))
                     chat.send(tostring(result))
-                    print("[DEBUG] Message queued for chat")
+                    debug.debug("Message queued for chat")
                     table.insert(messages, { role = "assistant", content = result })
                 end
             end
@@ -286,11 +287,187 @@ end
 
 main() 
 ]]
+files["programs/lib/jarvis/debug.lua"] = [[
+-- debug.lua
+-- Debug logging module for structured logging to files and console
+
+local Debug = {}
+
+-- Configuration
+local DEBUG_FILE = "debug.log"
+local DEBUG_JSON_FILE = "debug_full.json"
+local REQUEST_FILE = "debug_request.json"
+local RESPONSE_FILE = "debug_response.json"
+
+-- Log levels
+local LOG_LEVELS = {
+    DEBUG = 1,
+    INFO = 2,
+    WARN = 3,
+    ERROR = 4
+}
+
+-- Current log level (can be changed)
+Debug.level = LOG_LEVELS.DEBUG
+
+-- Helper function to get timestamp
+local function get_timestamp()
+    return os.date("%Y-%m-%d %H:%M:%S")
+end
+
+-- Helper function to get log level name
+local function get_level_name(level)
+    for name, value in pairs(LOG_LEVELS) do
+        if value == level then
+            return name
+        end
+    end
+    return "UNKNOWN"
+end
+
+-- Core logging function
+local function write_log(level, message, data)
+    if level < Debug.level then
+        return -- Skip if below current log level
+    end
+    
+    local timestamp = get_timestamp()
+    local level_name = get_level_name(level)
+    local log_entry = string.format("[%s] [%s] %s", timestamp, level_name, message)
+    
+    -- Print to console
+    print(log_entry)
+    
+    -- Write to log file
+    local file = fs.open(DEBUG_FILE, "a")
+    if file then
+        file.writeLine(log_entry)
+        if data then
+            file.writeLine("Data: " .. textutils.serialize(data))
+        end
+        file.close()
+    end
+end
+
+-- Public logging functions
+function Debug.debug(message, data)
+    write_log(LOG_LEVELS.DEBUG, message, data)
+end
+
+function Debug.info(message, data)
+    write_log(LOG_LEVELS.INFO, message, data)
+end
+
+function Debug.warn(message, data)
+    write_log(LOG_LEVELS.WARN, message, data)
+end
+
+function Debug.error(message, data)
+    write_log(LOG_LEVELS.ERROR, message, data)
+end
+
+-- Legacy support for existing debug patterns
+function Debug.log(message, data)
+    Debug.debug(message, data)
+end
+
+-- Specialized functions for HTTP debugging
+function Debug.write_json_log(data, description)
+    description = description or "Debug data"
+    Debug.debug("Writing JSON log: " .. description)
+    
+    local file = fs.open(DEBUG_JSON_FILE, "w")
+    if file then
+        file.write(textutils.serializeJSON(data))
+        file.close()
+        Debug.debug("JSON log written to " .. DEBUG_JSON_FILE)
+        return true
+    else
+        Debug.error("Could not write JSON log to " .. DEBUG_JSON_FILE)
+        return false
+    end
+end
+
+function Debug.write_request(request_json)
+    Debug.debug("Writing request data")
+    
+    local file = fs.open(REQUEST_FILE, "w")
+    if file then
+        file.write(request_json)
+        file.close()
+        Debug.debug("Request written to " .. REQUEST_FILE)
+        return true
+    else
+        Debug.error("Could not write request to " .. REQUEST_FILE)
+        return false
+    end
+end
+
+function Debug.write_response(response_body)
+    Debug.debug("Writing response data (" .. #response_body .. " bytes)")
+    
+    local file = fs.open(RESPONSE_FILE, "w")
+    if file then
+        file.write(response_body)
+        file.close()
+        Debug.debug("Response written to " .. RESPONSE_FILE)
+        return true
+    else
+        Debug.error("Could not write response to " .. RESPONSE_FILE)
+        return false
+    end
+end
+
+-- Function to preview long strings/JSON
+function Debug.preview(data, max_length)
+    max_length = max_length or 200
+    local str = type(data) == "string" and data or textutils.serialize(data)
+    if #str > max_length then
+        return str:sub(1, max_length) .. "..."
+    else
+        return str
+    end
+end
+
+-- API key masking for security
+function Debug.mask_api_key(api_key)
+    if api_key and #api_key > 8 then
+        return api_key:sub(1,4) .. "..." .. api_key:sub(-4)
+    else
+        return "Invalid or too short"
+    end
+end
+
+-- Clear all debug files
+function Debug.clear_logs()
+    local files = {DEBUG_FILE, DEBUG_JSON_FILE, REQUEST_FILE, RESPONSE_FILE}
+    for _, filename in ipairs(files) do
+        if fs.exists(filename) then
+            fs.delete(filename)
+            Debug.debug("Cleared " .. filename)
+        end
+    end
+end
+
+-- Set log level
+function Debug.set_level(level_name)
+    local level = LOG_LEVELS[level_name:upper()]
+    if level then
+        Debug.level = level
+        Debug.info("Log level set to " .. level_name:upper())
+    else
+        Debug.error("Invalid log level: " .. level_name)
+    end
+end
+
+return Debug 
+]]
 files["programs/lib/jarvis/tools.lua"] = [[
 -- tools.lua
 -- Defines the functions that the LLM can call.
 
 local Tools = {}
+local debug = require("debug")
 
 -- A registry to hold the function definitions and their callable implementations.
 local registry = {}
@@ -360,7 +537,7 @@ function Tools.test_connection()
     
     -- Test 1: General HTTP connectivity
     local test_url = "https://httpbin.org/get"
-    print("Testing HTTP connectivity to " .. test_url)
+    debug.info("Testing HTTP connectivity to " .. test_url)
     
     local success, response = http.get(test_url)
     if success then
@@ -382,7 +559,7 @@ function Tools.test_connection()
     end
     
     -- Test 2: OpenAI domain connectivity
-    print("Testing connectivity to OpenAI domain...")
+    debug.info("Testing connectivity to OpenAI domain...")
     local openai_success, openai_response = http.get("https://api.openai.com/")
     if openai_success then
         local openai_body = openai_response.readAll()
@@ -501,12 +678,13 @@ files["programs/lib/jarvis/llm.lua"] = [[
 -- Handles communication with the OpenAI API.
 
 local LLM = {}
+local debug = require("debug")
 
 local API_URL = "https://api.openai.com/v1/responses"
 
 -- Test basic connectivity to OpenAI
 function LLM.test_openai_connectivity()
-    print("[DEBUG] Testing basic connectivity to api.openai.com...")
+    debug.debug("Testing basic connectivity to api.openai.com...")
     
     -- Try a simpler test - just check if we can resolve the domain
     -- Instead of hitting the root, try a known endpoint that should return a proper error
@@ -514,23 +692,23 @@ function LLM.test_openai_connectivity()
         ["User-Agent"] = "ComputerCraft",
     }
     
-    print("[DEBUG] Attempting simple connectivity test...")
+    debug.debug("Attempting simple connectivity test...")
     local success, response = http.get("https://api.openai.com/v1/models", test_headers)
     
     if success then
         local body = response.readAll()
         response.close()
-        print("[DEBUG] OpenAI API is reachable (got response from /v1/models)")
+        debug.info("OpenAI API is reachable (got response from /v1/models)")
         return true, "OpenAI API reachable"
     else
         local err_msg = "Cannot reach OpenAI API"
         if response then
             if type(response) == "string" then
                 err_msg = err_msg .. ": " .. response
-                print("[DEBUG] Error: " .. response)
+                debug.error("Error: " .. response)
             end
         end
-        print("[DEBUG] " .. err_msg)
+        debug.error(err_msg)
         return false, err_msg
     end
 end
@@ -562,33 +740,32 @@ local function convert_messages_to_input(messages)
 end
 
 function LLM.request(api_key, model, messages, tools)
-    print("[DEBUG] Starting LLM request...")
-    print("[DEBUG] Target URL: " .. API_URL)
+    debug.info("Starting LLM request...")
+    debug.debug("Target URL: " .. API_URL)
     
     -- Check if HTTP is enabled
     if not http then
-        print("[DEBUG] HTTP API not available")
+        debug.error("HTTP API not available")
         return false, "HTTP API is not available. Ensure 'http_enable' is set to true in computercraft-common.toml"
     end
-    print("[DEBUG] HTTP API is available")
+    debug.debug("HTTP API is available")
     
     -- Debug API key (show first/last 4 chars only for security)
-    if api_key and #api_key > 8 then
-        print("[DEBUG] API key format: " .. api_key:sub(1,4) .. "..." .. api_key:sub(-4))
-    else
-        print("[DEBUG] API key appears invalid or too short")
+    debug.debug("API key format: " .. debug.mask_api_key(api_key))
+    if not api_key or #api_key <= 8 then
+        debug.error("API key appears invalid or too short")
         return false, "Invalid API key format"
     end
     
-    print("[DEBUG] Model: " .. tostring(model))
-    print("[DEBUG] Messages count: " .. #messages)
+    debug.debug("Model: " .. tostring(model))
+    debug.debug("Messages count: " .. #messages)
     
     -- Use exact same headers as working curl example
     local headers = {
         ["Authorization"] = "Bearer " .. api_key,
         ["Content-Type"] = "application/json"
     }
-    print("[DEBUG] Headers prepared (matching curl format)")
+    debug.debug("Headers prepared (matching curl format)")
 
     -- Convert messages to the new input format
     local input = convert_messages_to_input(messages)
@@ -609,23 +786,21 @@ function LLM.request(api_key, model, messages, tools)
         top_p = 1,
         store = true
     }
-    
 
-
-    print("[DEBUG] Serializing request body...")
+    debug.debug("Serializing request body...")
     -- Use the same serialization as working GPT.lua example
     local body_json = textutils.serializeJSON(body)
-    print("[DEBUG] Used serializeJSON (matching GPT.lua)")
+    debug.debug("Used serializeJSON (matching GPT.lua)")
     
     -- Fix the tools field to be an empty array instead of empty object
     body_json = body_json:gsub('"tools":{}', '"tools":[]')
-    print("[DEBUG] Fixed tools field to be empty array")
+    debug.debug("Fixed tools field to be empty array")
     
-    print("[DEBUG] Request body serialized successfully")
-    print("[DEBUG] Request size: " .. #body_json .. " bytes")
+    debug.debug("Request body serialized successfully")
+    debug.debug("Request size: " .. #body_json .. " bytes")
     
     -- Write comprehensive debug log
-    print("[DEBUG] Writing comprehensive debug log...")
+    debug.debug("Writing comprehensive debug log...")
     local debug_log = {
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
         tick_time = os.clock(),
@@ -648,70 +823,53 @@ function LLM.request(api_key, model, messages, tools)
                 debug_log[k] = v
             end
         end
-        
-        local debug_file = fs.open("debug_full.json", "w")
-        if debug_file then
-            debug_file.write(textutils.serializeJSON(debug_log))
-            debug_file.close()
-            print("[DEBUG] Full debug log written to debug_full.json")
-        else
-            print("[DEBUG] Warning: Could not write full debug log")
-        end
+        debug.write_json_log(debug_log, "Full HTTP request/response debug data")
     end
     
     -- Write initial debug state
     write_debug_log()
     
-    -- Also write the formatted JSON request and response separately for easy copying
-    local debug_request_file = fs.open("debug_request.json", "w")
-    if debug_request_file then
-        debug_request_file.write(body_json)
-        debug_request_file.close()
-        print("[DEBUG] Request written to debug_request.json")
-    end
+    -- Also write the formatted JSON request separately for easy copying
+    debug.write_request(body_json)
     
     -- Validate JSON before sending
     if not body_json or body_json == "" then
+        debug.error("Failed to serialize request body to JSON")
         return false, "Failed to serialize request body to JSON"
     end
     
     -- Show first 200 chars of request for debugging
-    print("[DEBUG] Request preview: " .. body_json:sub(1, 200) .. (#body_json > 200 and "..." or ""))
+    debug.debug("Request preview: " .. debug.preview(body_json))
     
-    print("[DEBUG] Making async HTTP request (matching curl pattern)...")
+    debug.info("Making async HTTP request (matching curl pattern)...")
     
     -- Use exact same pattern as working GPT.lua example
     http.request(API_URL, body_json, headers)
     
-    print("[DEBUG] HTTP request sent, waiting for response...")
+    debug.debug("HTTP request sent, waiting for response...")
     
     -- Wait for the response using event handling (exact same as GPT.lua)
     while true do
         local event, url, handle = os.pullEvent()
         
         if event == "http_success" then
-            print("[DEBUG] HTTP request successful, reading response...")
+            debug.info("HTTP request successful, reading response...")
             local response_body = handle.readAll()
             handle.close()
-            print("[DEBUG] Response received: " .. #response_body .. " bytes")
+            debug.debug("Response received: " .. #response_body .. " bytes")
             
             -- Write the response to separate file for easy copying
-            local debug_response_file = fs.open("debug_response.json", "w")
-            if debug_response_file then
-                debug_response_file.write(response_body)
-                debug_response_file.close()
-                print("[DEBUG] Response written to debug_response.json")
-            end
+            debug.write_response(response_body)
             
             -- Show first 200 chars of response for debugging
-            print("[DEBUG] Response preview: " .. response_body:sub(1, 200) .. (#response_body > 200 and "..." or ""))
+            debug.debug("Response preview: " .. debug.preview(response_body))
             
-            print("[DEBUG] Parsing JSON response...")
+            debug.debug("Parsing JSON response...")
             local response_data = textutils.unserializeJSON(response_body)
-            print("[DEBUG] Used unserializeJSON (matching GPT.lua)")
+            debug.debug("Used unserializeJSON (matching GPT.lua)")
 
             if not response_data then
-                print("[DEBUG] Failed to parse JSON response")
+                debug.error("Failed to parse JSON response")
                 local error_msg = "Failed to decode JSON response from API: " .. tostring(response_body)
                 write_debug_log({
                     error = error_msg,
@@ -720,10 +878,10 @@ function LLM.request(api_key, model, messages, tools)
                 })
                 return false, error_msg
             end
-            print("[DEBUG] JSON response parsed successfully")
+            debug.debug("JSON response parsed successfully")
             
             if response_data.error then
-                print("[DEBUG] API returned error: " .. response_data.error.message)
+                debug.error("API returned error: " .. response_data.error.message)
                 local error_msg = "API Error: " .. response_data.error.message
                 write_debug_log({
                     error = error_msg,
@@ -734,7 +892,7 @@ function LLM.request(api_key, model, messages, tools)
                 return false, error_msg
             end
 
-            print("[DEBUG] LLM request completed successfully")
+            debug.info("LLM request completed successfully")
             write_debug_log({
                 success = true,
                 response = response_data,
@@ -743,12 +901,12 @@ function LLM.request(api_key, model, messages, tools)
             return true, response_data
             
         elseif event == "http_failure" then
-            print("[DEBUG] HTTP request failed with http_failure event")
+            debug.error("HTTP request failed with http_failure event")
             local error_msg = "HTTP request failed (http_failure event)"
             if handle then
                 if type(handle) == "string" then
                     error_msg = error_msg .. ": " .. handle
-                    print("[DEBUG] Error details: " .. handle)
+                    debug.error("Error details: " .. handle)
                 end
             end
             write_debug_log({
@@ -774,6 +932,7 @@ local chatbox_queue = {}
 
 -- Load tools module for bot name management
 local tools = require("lib.jarvis.tools")
+local debug = require("debug")
 
 -- Queue state
 local message_queue = {}
@@ -789,7 +948,7 @@ function chatbox_queue.init(peripheral, delay_seconds)
     end
     message_queue = {}
     last_send_time = 0
-    print("[ChatBox Queue] Initialized with " .. (delay_seconds or 1) .. " second delay")
+    debug.info("ChatBox Queue initialized with " .. (delay_seconds or 1) .. " second delay")
 end
 
 -- Add a message to the queue
@@ -804,7 +963,7 @@ function chatbox_queue.sendMessage(message, sender, target)
         target = target or "<>"
     })
     
-    print("[ChatBox Queue] Message queued: " .. tostring(message))
+    debug.debug("ChatBox Queue message queued: " .. tostring(message))
 end
 
 -- Process the queue - call this regularly in your main loop
@@ -826,10 +985,10 @@ function chatbox_queue.process()
         
         local ok, err = chatbox_peripheral.sendMessage(msg_data.message, msg_data.sender, msg_data.target)
         if ok then
-            print("[ChatBox Queue] Message sent: " .. msg_data.message)
+            debug.info("ChatBox Queue message sent: " .. msg_data.message)
             last_send_time = current_time
         else
-            print("[ChatBox Queue] Failed to send message: " .. tostring(err))
+            debug.error("ChatBox Queue failed to send message: " .. tostring(err))
             -- Re-add message to front of queue to retry
             table.insert(message_queue, 1, msg_data)
         end
@@ -845,7 +1004,7 @@ end
 function chatbox_queue.clearQueue()
     local cleared_count = #message_queue
     message_queue = {}
-    print("[ChatBox Queue] Cleared " .. cleared_count .. " messages from queue")
+    debug.warn("ChatBox Queue cleared " .. cleared_count .. " messages from queue")
     return cleared_count
 end
 
