@@ -259,7 +259,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #49 (2025-06-13 06:37:31 UTC)")
+    debug.info("Build: #50 (2025-06-13 06:43:39 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -291,7 +291,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #49 built on 2025-06-13 06:37:31 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #50 built on 2025-06-13 06:43:39 UTC]" }
             }
             return true
         end
@@ -436,23 +436,26 @@ local function main()
                     chat.send(tostring(result.content))
                     debug.debug("Message queued for chat")
                     
-                    -- Store assistant message with original ID for conversation continuity
-                    local assistant_message = { 
-                        role = "assistant", 
-                        content = result.content 
-                    }
-                    if result.id then
-                        assistant_message.id = result.id
+                    -- Only store assistant message if there's actual content or a valid ID
+                    -- Function-only responses don't need to be stored as assistant messages
+                    if result.content and result.content ~= "" and result.id then
+                        local assistant_message = { 
+                            role = "assistant", 
+                            content = result.content,
+                            id = result.id
+                        }
+                        
+                        -- Add tool calls to the assistant message if present
+                        if result.tool_calls and #result.tool_calls > 0 then
+                            assistant_message.tool_calls = result.tool_calls
+                            debug.debug("Stored " .. #result.tool_calls .. " tool calls with assistant message")
+                        end
+                        
+                        table.insert(messages, assistant_message)
                         debug.debug("Stored assistant message with ID: " .. result.id)
+                    else
+                        debug.debug("Skipping assistant message storage (function-only response or no ID)")
                     end
-                    
-                    -- Add tool calls to the assistant message if present
-                    if result.tool_calls and #result.tool_calls > 0 then
-                        assistant_message.tool_calls = result.tool_calls
-                        debug.debug("Stored " .. #result.tool_calls .. " tool calls with assistant message")
-                    end
-                    
-                    table.insert(messages, assistant_message)
                     
                     -- Add tool results to conversation history if there were tool calls
                     if result.tool_results and #result.tool_results > 0 then
@@ -735,18 +738,42 @@ function Tools.door_control(action)
     debug.info("Sending door control command: " .. action)
     debug.debug("Transmitting on channel 25, reply channel " .. bot_channel)
     
+    -- Send the command
     modem_peripheral.transmit(25, bot_channel, action)
-    local success = false
+    
+    -- Wait for response with timeout
     local start_time = os.clock()
-    repeat
-        local event, modem_side, sender_channel, reply_channel, message, distance = os.pullEvent("modem_message")
-        if sender_channel == 25 and message == "success" then
-            return { success = true, message = "Door " .. action .. " command sent successfully" }
-        else
-            return { success = false, message = "Failed to send door command" }
+    local timeout = 5 -- 5 second timeout
+    
+    while os.clock() - start_time < timeout do
+        local event_data = {os.pullEventRaw(timeout - (os.clock() - start_time))}
+        local event = event_data[1]
+        
+        if event == "modem_message" then
+            local modem_side, sender_channel, reply_channel, message, distance = table.unpack(event_data, 2)
+            
+            debug.debug("Received modem message from channel " .. sender_channel .. ": " .. tostring(message))
+            
+            -- Check if this is a response from our door system
+            if sender_channel == 25 and reply_channel == bot_channel then
+                if message == "success" then
+                    debug.info("Door " .. action .. " operation successful")
+                    return { success = true, message = "Door " .. action .. "ed successfully" }
+                elseif message == "failure" or message == "error" then
+                    debug.warn("Door " .. action .. " operation failed")
+                    return { success = false, message = "Door " .. action .. " operation failed" }
+                else
+                    debug.debug("Unexpected door response: " .. tostring(message))
+                end
+            end
+        elseif event == "terminate" then
+            debug.warn("Door control interrupted")
+            return { success = false, message = "Door control interrupted" }
         end
-    until success or os.clock() - start_time > 10
-    return { success = false, message = "Request timed out" }
+    end
+    
+    debug.warn("Door control timed out after " .. timeout .. " seconds")
+    return { success = false, message = "Door control timed out - no response from door system" }
 end
 
 -- Tool Definition: test_connection
@@ -1393,7 +1420,7 @@ return config
 
         print([[
 
-    Installation complete! Build #49 (2025-06-13 06:37:31 UTC)
+    Installation complete! Build #50 (2025-06-13 06:43:39 UTC)
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
     Reboot the computer to start Jarvis automatically.
     Or, to run Jarvis now, execute: 'programs/jarvis'
