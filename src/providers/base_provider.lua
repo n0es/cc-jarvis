@@ -65,8 +65,8 @@ function BaseProvider:process_response(response_data)
                     if tool_call.type == "function" then
                         table.insert(results, {
                             type = "tool_call",
-                            tool_name = tool_call.function.name,
-                            tool_args_json = tool_call.function.arguments
+                            tool_name = tool_call["function"].name,
+                            tool_args_json = tool_call["function"].arguments
                         })
                     end
                 end
