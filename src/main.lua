@@ -34,6 +34,9 @@ else
         '-- The model to use. "gpt-4.1" is a good default for the new API.',
         'config.model = "gpt-4.1"',
         "",
+        "-- Bot's modem channel for door control (default: 32)",
+        "config.bot_channel = 32",
+        "",
         "return config",
         "--------------------------------------------------"
     }, "\n")
@@ -226,6 +229,16 @@ local function main()
         error("Could not find a 'chatBox' peripheral. Please place one next to the computer.", 0)
     end
 
+    local modem = peripheral.find("modem")
+    if not modem then
+        error("Could not find a 'modem' peripheral. Please place one next to the computer.", 0)
+    end
+
+    -- Open the bot's channel for listening
+    local bot_channel = config.bot_channel or 32
+    modem.open(bot_channel)
+    debug.info("Modem initialized on channel " .. bot_channel)
+
     -- Initialize the chatbox queue with 1 second delay
     chatbox_queue.init(chatBox, 1)
     
@@ -238,9 +251,11 @@ local function main()
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
     }
+    -- Initialize tools with modem access
+    tools.set_modem(modem, bot_channel)
+    
     -- Get available tool schemas for the LLM  
-    -- Temporarily disable tools to debug the format issue
-    local tool_schemas = {} -- tools.get_all_schemas()
+    local tool_schemas = tools.get_all_schemas()
 
     -- Time-based context and listening mode variables
     local CONTEXT_TIMEOUT = 5 * 60 * 20  -- 5 minutes in ticks (20 ticks per second)

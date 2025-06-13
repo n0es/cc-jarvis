@@ -11,6 +11,10 @@ local registry = {}
 local BOT_NAME_FILE = "/etc/jarvis/botname.txt"
 local DEFAULT_BOT_NAME = "jarvis"
 
+-- Modem management
+local modem_peripheral = nil
+local bot_channel = 32
+
 -- Function to get the current bot name
 function Tools.get_bot_name()
     if fs.exists(BOT_NAME_FILE) then
@@ -55,10 +59,39 @@ function Tools.is_message_for_bot(message)
     return msg_lower:match("^" .. bot_name .. "[%s,:%?]") ~= nil
 end
 
+-- Function to set modem peripheral for door control
+function Tools.set_modem(modem, channel)
+    modem_peripheral = modem
+    bot_channel = channel or 32
+    debug.debug("Tools modem set to channel " .. bot_channel)
+end
+
 -- Tool Definition: change_name
 -- This function changes the bot's name.
 function Tools.change_name(new_name)
     return Tools.set_bot_name(new_name)
+end
+
+-- Tool Definition: door_control
+-- This function opens or closes the base door via modem.
+function Tools.door_control(action)
+    if not modem_peripheral then
+        return { success = false, message = "Modem not available for door control" }
+    end
+    
+    if not action or (action ~= "open" and action ~= "close") then
+        return { success = false, message = "Invalid action. Use 'open' or 'close'" }
+    end
+    
+    debug.info("Sending door control command: " .. action)
+    debug.debug("Transmitting on channel 25, reply channel " .. bot_channel)
+    
+    local success = modem_peripheral.transmit(25, bot_channel, action)
+    if success then
+        return { success = true, message = "Door " .. action .. " command sent successfully" }
+    else
+        return { success = false, message = "Failed to send door command" }
+    end
 end
 
 -- Tool Definition: test_connection
@@ -129,15 +162,15 @@ registry.get_time = {
     func = Tools.get_time,
     schema = {
         type = "function",
-        ["function"] = {
-            name = "get_time",
-            description = "Get the current in-game time.",
-            parameters = {
-                type = "object",
-                properties = {},
-                required = {},
-            },
+        name = "get_time",
+        description = "Get the current in-game time.",
+        parameters = {
+            type = "object",
+            properties = {},
+            additionalProperties = false,
+            required = {}
         },
+        strict = true
     },
 }
 
@@ -149,20 +182,20 @@ registry.change_name = {
     end,
     schema = {
         type = "function",
-        ["function"] = {
-            name = "change_name",
-            description = "Change the bot's name that it responds to.",
-            parameters = {
-                type = "object",
-                properties = {
-                    new_name = {
-                        type = "string",
-                        description = "The new name for the bot"
-                    }
-                },
-                required = {"new_name"},
+        name = "change_name",
+        description = "Change the bot's name that it responds to.",
+        parameters = {
+            type = "object",
+            properties = {
+                new_name = {
+                    type = "string",
+                    description = "The new name for the bot"
+                }
             },
+            additionalProperties = false,
+            required = {"new_name"}
         },
+        strict = true
     },
 }
 
@@ -171,15 +204,41 @@ registry.test_connection = {
     func = Tools.test_connection,
     schema = {
         type = "function",
-        ["function"] = {
-            name = "test_connection",
-            description = "Test HTTP connectivity to diagnose connection issues.",
-            parameters = {
-                type = "object",
-                properties = {},
-                required = {},
-            },
+        name = "test_connection",
+        description = "Test HTTP connectivity to diagnose connection issues.",
+        parameters = {
+            type = "object",
+            properties = {},
+            additionalProperties = false,
+            required = {}
         },
+        strict = true
+    },
+}
+
+-- Register the door_control tool
+registry.door_control = {
+    func = function(args)
+        local action = args and args.action
+        return Tools.door_control(action)
+    end,
+    schema = {
+        type = "function",
+        name = "door_control",
+        description = "Control the base door by sending open or close commands via modem.",
+        parameters = {
+            type = "object",
+            properties = {
+                action = {
+                    type = "string",
+                    description = "The action to perform: 'open' or 'close'",
+                    enum = {"open", "close"}
+                }
+            },
+            additionalProperties = false,
+            required = {"action"}
+        },
+        strict = true
     },
 }
 
