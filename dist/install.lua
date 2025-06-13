@@ -57,22 +57,40 @@ local function extract_response_data(response_data)
     if response_data.output and type(response_data.output) == "table" and #response_data.output > 0 then
         local message = response_data.output[1]
         if message.content and type(message.content) == "table" and #message.content > 0 then
-            local content_obj = message.content[1]
-            if content_obj.text then
-                return {
-                    content = content_obj.text,
-                    id = message.id
-                }
+            local result = {
+                id = message.id,
+                tool_calls = {},
+                content = nil
+            }
+            
+            -- Process all content items
+            for _, content_obj in ipairs(message.content) do
+                if content_obj.type == "output_text" and content_obj.text then
+                    result.content = content_obj.text
+                elseif content_obj.type == "function_call" then
+                    -- Handle tool/function calls in the new format
+                    table.insert(result.tool_calls, {
+                        id = content_obj.id or ("call_" .. os.epoch("utc") .. math.random(1000, 9999)),
+                        type = "function",
+                        ["function"] = {
+                            name = content_obj.name,
+                            arguments = content_obj.parameters and textutils.serializeJSON(content_obj.parameters) or "{}"
+                        }
+                    })
+                end
             end
+            
+            return result
         end
     end
     
     -- Fallback to standard OpenAI format if available
     if response_data.choices and #response_data.choices > 0 then
         local choice = response_data.choices[1]
-        if choice.message and choice.message.content then
+        if choice.message then
             return {
                 content = choice.message.content,
+                tool_calls = choice.message.tool_calls or {},
                 id = nil  -- Standard format doesn't have IDs
             }
         end
@@ -85,17 +103,127 @@ local function process_llm_response(response_data)
     -- Try to extract content using the new format
     debug.debug("Processing LLM response...")
     local response_info = extract_response_data(response_data)
-    if response_info and response_info.content then
-        debug.debug("Successfully extracted content: " .. response_info.content)
-        return response_info
+    if not response_info then
+        debug.error("Failed to extract content from response")
+        return {
+            content = "I received a response but couldn't parse it properly.",
+            id = nil,
+            tool_calls = {}
+        }
     end
     
-    -- If we can't extract content, return an error message
-    debug.error("Failed to extract content from response")
-    return {
-        content = "I received a response but couldn't parse it properly.",
-        id = nil
-    }
+    -- Check if there are tool calls to execute
+    if response_info.tool_calls and #response_info.tool_calls > 0 then
+        debug.info("Processing " .. #response_info.tool_calls .. " tool call(s)")
+        
+        local tool_results = {}
+        local all_results_text = {}
+        
+        for _, tool_call in ipairs(response_info.tool_calls) do
+            local function_name = tool_call["function"].name
+            local arguments_json = tool_call["function"].arguments
+            
+            debug.debug("Executing tool: " .. function_name)
+            debug.debug("Arguments: " .. arguments_json)
+            
+            -- Get the tool function
+            local tool_func = tools.get_tool(function_name)
+            if not tool_func then
+                local error_msg = "Unknown tool: " .. function_name
+                debug.error(error_msg)
+                table.insert(tool_results, {
+                    tool_call_id = tool_call.id,
+                    role = "tool",
+                    content = error_msg
+                })
+                table.insert(all_results_text, error_msg)
+            else
+                -- Parse arguments
+                local arguments = {}
+                if arguments_json and arguments_json ~= "{}" then
+                    arguments = textutils.unserializeJSON(arguments_json)
+                    if not arguments then
+                        local error_msg = "Failed to parse tool arguments: " .. arguments_json
+                        debug.error(error_msg)
+                        table.insert(tool_results, {
+                            tool_call_id = tool_call.id,
+                            role = "tool",
+                            content = error_msg
+                        })
+                        table.insert(all_results_text, error_msg)
+                        goto continue_tool_loop
+                    end
+                end
+                
+                -- Execute the tool
+                local success, result = pcall(tool_func, arguments)
+                if success then
+                    local result_text = type(result) == "table" and textutils.serializeJSON(result) or tostring(result)
+                    debug.info("Tool " .. function_name .. " executed successfully")
+                    debug.debug("Tool result: " .. result_text)
+                    
+                    table.insert(tool_results, {
+                        tool_call_id = tool_call.id,
+                        role = "tool",
+                        content = result_text
+                    })
+                    
+                    -- Format result for display
+                    if type(result) == "table" and result.message then
+                        table.insert(all_results_text, result.message)
+                    else
+                        table.insert(all_results_text, result_text)
+                    end
+                else
+                    local error_msg = "Tool execution failed: " .. tostring(result)
+                    debug.error(error_msg)
+                    table.insert(tool_results, {
+                        tool_call_id = tool_call.id,
+                        role = "tool",
+                        content = error_msg
+                    })
+                    table.insert(all_results_text, error_msg)
+                end
+            end
+            
+            ::continue_tool_loop::
+        end
+        
+        -- Combine content and tool results for display
+        local display_content = ""
+        if response_info.content and response_info.content ~= "" then
+            display_content = response_info.content
+        end
+        
+        if #all_results_text > 0 then
+            local results_str = table.concat(all_results_text, " | ")
+            if display_content ~= "" then
+                display_content = display_content .. " " .. results_str
+            else
+                display_content = results_str
+            end
+        end
+        
+        return {
+            content = display_content,
+            id = response_info.id,
+            tool_calls = response_info.tool_calls,
+            tool_results = tool_results
+        }
+    else
+        -- No tool calls, just return the content
+        if response_info.content then
+            debug.debug("Successfully extracted content: " .. response_info.content)
+            return response_info
+        else
+            debug.warn("No content or tool calls in response")
+            return {
+                content = "I received a response but it was empty.",
+                id = response_info.id,
+                tool_calls = {}
+            }
+        end
+    end
 end
 
 
@@ -117,8 +245,8 @@ local function main()
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
     }
-    -- Comment out tools for now to focus on basic chat
-    -- local tool_schemas = tools.get_all_schemas()
+    -- Get available tool schemas for the LLM
+    local tool_schemas = tools.get_all_schemas()
 
     -- Time-based context and listening mode variables
     local CONTEXT_TIMEOUT = 5 * 60 * 20  -- 5 minutes in ticks (20 ticks per second)
@@ -141,7 +269,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant." }
             }
             return true
         end
@@ -246,7 +374,7 @@ local function main()
                     
                     -- Use parallel.waitForAny to handle the LLM request with timeout
                     local function llm_task()
-                        local ok, response = llm.request(config.openai_api_key, config.model, messages)
+                        local ok, response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
                         return ok, response
                     end
                     
@@ -295,7 +423,22 @@ local function main()
                         assistant_message.id = result.id
                         debug.debug("Stored assistant message with ID: " .. result.id)
                     end
+                    
+                    -- Add tool calls to the assistant message if present
+                    if result.tool_calls and #result.tool_calls > 0 then
+                        assistant_message.tool_calls = result.tool_calls
+                        debug.debug("Stored " .. #result.tool_calls .. " tool calls with assistant message")
+                    end
+                    
                     table.insert(messages, assistant_message)
+                    
+                    -- Add tool results to conversation history if there were tool calls
+                    if result.tool_results and #result.tool_results > 0 then
+                        for _, tool_result in ipairs(result.tool_results) do
+                            table.insert(messages, tool_result)
+                            debug.debug("Stored tool result for call ID: " .. tool_result.tool_call_id)
+                        end
+                    end
                 end
             end
         end
@@ -737,29 +880,63 @@ local function convert_messages_to_input(messages)
     local input = {}
     
     for _, message in ipairs(messages) do
-        local converted_message = {
-            role = message.role,
-            content = {
-                {
-                    type = message.role == "assistant" and "output_text" or "input_text",
-                    text = message.content
+        if message.role == "tool" then
+            -- Tool result messages - add them as input_text
+            local converted_message = {
+                role = "user",  -- Tool results are treated as user input in the new format
+                content = {
+                    {
+                        type = "input_text",
+                        text = "Tool result for " .. (message.tool_call_id or "unknown") .. ": " .. (message.content or "No result")
+                    }
                 }
             }
-        }
-        
-        -- Add id for assistant messages (required by the new format)
-        if message.role == "assistant" then
-            -- Use stored ID if available, otherwise generate a new one
-            if message.id then
-                converted_message.id = message.id
-                debug.debug("Using stored assistant message ID: " .. message.id)
-            else
-                converted_message.id = "msg_" .. tostring(os.epoch("utc")) .. math.random(100000, 999999)
-                debug.debug("Generated new assistant message ID: " .. converted_message.id)
+            table.insert(input, converted_message)
+        else
+            local converted_message = {
+                role = message.role,
+                content = {}
+            }
+            
+            -- Add the main content
+            if message.content and message.content ~= "" then
+                table.insert(converted_message.content, {
+                    type = message.role == "assistant" and "output_text" or "input_text",
+                    text = message.content
+                })
             end
+            
+            -- Add tool calls if present (for assistant messages)
+            if message.role == "assistant" and message.tool_calls then
+                for _, tool_call in ipairs(message.tool_calls) do
+                    local function_args = {}
+                    if tool_call["function"].arguments and tool_call["function"].arguments ~= "{}" then
+                        function_args = textutils.unserializeJSON(tool_call["function"].arguments) or {}
+                    end
+                    
+                    table.insert(converted_message.content, {
+                        type = "function_call",
+                        id = tool_call.id,
+                        name = tool_call["function"].name,
+                        parameters = function_args
+                    })
+                end
+            end
+            
+            -- Add id for assistant messages (required by the new format)
+            if message.role == "assistant" then
+                -- Use stored ID if available, otherwise generate a new one
+                if message.id then
+                    converted_message.id = message.id
+                    debug.debug("Using stored assistant message ID: " .. message.id)
+                else
+                    converted_message.id = "msg_" .. tostring(os.epoch("utc")) .. math.random(100000, 999999)
+                    debug.debug("Generated new assistant message ID: " .. converted_message.id)
+                end
+            end
+            
+            table.insert(input, converted_message)
         end
-        
-        table.insert(input, converted_message)
     end
     
     return input
