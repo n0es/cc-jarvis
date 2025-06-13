@@ -15,48 +15,32 @@ local chatbox_queue = require("lib.jarvis.chatbox_queue")
 local debug = require("lib.jarvis.debug")
 
 -- Load config
-local CONFIG_PATH_LUA = "etc.jarvis.config"
 local CONFIG_PATH_FS = "/etc/jarvis/config.lua"
-
-local config
+local config = {}
 if fs.exists(CONFIG_PATH_FS) then
     local config_func, err = loadfile(CONFIG_PATH_FS)
     if config_func then
-        config = config_func()
+        config = config_func() or {}
     else
         error("Failed to load config file: " .. tostring(err), 0)
     end
 else
-    local err_msg = table.concat({
-        "Could not load config from '" .. CONFIG_PATH_FS .. "'.",
-        "Please create this file and add your OpenAI API key.",
-        "",
-        "Example to paste into the new file:",
-        "--------------------------------------------------",
-        "local config = {}",
-        "",
-        '-- Your OpenAI API key from https://platform.openai.com/api-keys',
-        'config.openai_api_key = "YOUR_API_KEY_HERE"',
-        "",
-        '-- The model to use. "gpt-4.1" is a good default for the new API.',
-        'config.model = "gpt-4.1"',
-        "",
-        "-- Bot's modem channel for door control (default: 32)",
-        "config.bot_channel = 32",
-        "",
-        "return config",
-        "--------------------------------------------------"
-    }, "\n")
-    error(err_msg, 0)
+    error("Config file not found at " .. CONFIG_PATH_FS, 0)
 end
 
-if not config.openai_api_key or config.openai_api_key == "YOUR_OPENAI_KEY_HERE" then
-    error("OpenAI API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
-end
-
+-- Validate config
 if not config.gemini_api_key or config.gemini_api_key == "YOUR_GEMINI_KEY_HERE" then
-    error("Gemini API key is not set in " .. CONFIG_PATH_FS .. ". Please add your Gemini API key.", 0)
+    debug.warn("Gemini API key is not set. Gemini provider will not be available.")
 end
+if not config.openai_api_key or config.openai_api_key == "YOUR_OPENAI_KEY_HERE" then
+    debug.warn("OpenAI API key is not set. OpenAI provider will not be available.")
+end
+
+-- Global state variables
+local messages = {}
+local listen_mode_active = false
+local listen_until = 0
+local chatBox -- Declare here to make it accessible in main_loop and the final pcall
 
 -- Helper function to get the appropriate API key for the current provider
 local function get_api_key_for_provider()
@@ -66,7 +50,8 @@ local function get_api_key_for_provider()
     elseif current_provider == "gemini" then
         return config.gemini_api_key
     else
-        error("Unknown provider: " .. tostring(current_provider), 0)
+        debug.error("Unknown or unconfigured provider: " .. tostring(current_provider))
+        return nil
     end
 end
 
@@ -147,34 +132,50 @@ local function process_llm_response(response_parts, messages_history)
 end
 
 local function handle_chat_message(username, message_text)
-    -- Check if the bot was mentioned or if it should be actively listening
-    local bot_name = tools.get_bot_name()
+    local bot_name = tools.get_bot_name():lower()
     local msg_lower = message_text:lower()
-    if msg_lower:find(bot_name, 1, true) ~= nil then
-        debug.info("Bot mentioned - entering listen mode")
-        -- Enter listen mode
-        -- Implement listen mode logic here
-    else
-        debug.info("Thinking...")
-        local success, response_data = llm.request(get_api_key_for_provider(), config.model, messages, tools.get_tools())
-        
-        if success then
-            process_llm_response(response_data, messages)
-        else
-            local error_message = "Sorry, I encountered an error."
-            if type(response_data) == "string" then
-                error_message = response_data
-            end
-            chatbox_queue.add_message(error_message)
-            debug.error("LLM request failed: " .. error_message)
-        end
+    local is_mention = msg_lower:find(bot_name, 1, true) ~= nil
+
+    if is_mention then
+        listen_mode_active = true
+        listen_until = os.time() + (config.listen_duration or 120)
+        debug.info("Bot mentioned - entering listen mode for " .. (config.listen_duration or 120) .. " seconds")
     end
 
-    -- Trim history if it gets too long
-    if #messages > (config.history_limit or 20) then
+    if not listen_mode_active then
+        return -- Ignore messages if not in listen mode
+    end
+
+    debug.info(username .. " says: " .. message_text)
+    table.insert(messages, { role = "user", content = username .. ": " .. message_text })
+
+    -- Request response from LLM
+    debug.info("Thinking...")
+    local api_key = get_api_key_for_provider()
+    if not api_key then
+        chatbox_queue.add_message("API key for the current provider is not configured.")
+        return
+    end
+
+    local success, response_data = llm.request(api_key, config.model, messages, tools.get_tools())
+    
+    if success then
+        process_llm_response(response_data, messages)
+    else
+        local error_message = "Sorry, I encountered an error."
+        if type(response_data) == "string" then
+            error_message = response_data
+        end
+        chatbox_queue.add_message(error_message)
+        debug.error("LLM request failed: " .. error_message)
+    end
+
+    -- Trim history
+    local history_limit = config.history_limit or 20
+    if #messages > history_limit then
         local trimmed_messages = {}
         table.insert(trimmed_messages, messages[1]) -- Keep system prompt
-        for i = #messages - (config.history_limit or 20) + 2, #messages do
+        for i = #messages - history_limit + 2, #messages do
             table.insert(trimmed_messages, messages[i])
         end
         messages = trimmed_messages
@@ -183,222 +184,76 @@ local function handle_chat_message(username, message_text)
 end
 
 local function initialize()
-    local chatBox = peripheral.find("chatBox")
-    if not chatBox then
-        error("Could not find a 'chatBox' peripheral. Please place one next to the computer.", 0)
-    end
-
+    -- Initialize modem for door control and tools
+    local modem_channel = config.bot_channel or 32
     local modem = peripheral.find("modem")
-    if not modem then
-        error("Could not find a 'modem' peripheral. Please place one next to the computer.", 0)
+    if modem and modem.isOpen(modem_channel) then
+        modem.close(modem_channel)
+    end
+    if modem then
+        modem.open(modem_channel)
+        debug.info("Modem initialized on channel " .. modem_channel)
+    else
+        debug.warn("Modem not found. Door control and other modem-based tools will be unavailable.")
+    end
+    tools.set_modem(modem, modem_channel)
+
+    -- Initialize chatbox queue
+    chatbox_queue.init(config.chat_delay or 1)
+    debug.info("ChatBox Queue initialized with " .. (config.chat_delay or 1) .. " second delay")
+    
+    -- Find chatbox peripheral
+    chatBox = peripheral.find("chatBox")
+    if not chatBox then
+        error("ChatBox peripheral not found. Please attach a chat box.", 0)
     end
 
-    -- Open the bot's channel for listening
-    local bot_channel = config.bot_channel or 32
-    modem.open(bot_channel)
-    debug.info("Modem initialized on channel " .. bot_channel)
-
-    -- Initialize the chatbox queue with 1 second delay
-    chatbox_queue.init(chatBox, 1)
-    
-    -- Create a simple chat interface
-    local chat = chatbox_queue.chat
-
-    debug.info("Jarvis is online. Waiting for messages.")
-    debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #79 (2025-06-13 21:14:07 UTC)")
-
-    local messages = {
+    -- Initialize message history with system prompt
+    messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
     }
-    -- Initialize tools with modem access
-    tools.set_modem(modem, bot_channel)
-    
-    -- Get available tool schemas for the LLM  
-    local tool_schemas = tools.get_all_schemas()
 
-    -- Time-based context and listening mode variables
-    local CONTEXT_TIMEOUT = 5 * 60 * 20  -- 5 minutes in ticks (20 ticks per second)
-    local LISTEN_MODE_TIMEOUT = 2 * 60 * 20  -- 2 minutes in ticks
-    local last_message_time = os.clock() * 20  -- Convert to ticks
-    local listen_mode_end_time = 0  -- When to stop listening to all messages
-    local in_listen_mode = false
-
-    -- Function to check if bot name is mentioned anywhere in message
-    local function is_bot_mentioned(message)
-        local bot_name = tools.get_bot_name()
-        local msg_lower = message:lower()
-        return msg_lower:find(bot_name, 1, true) ~= nil
-    end
-
-    -- Function to clear context if too much time has passed
-    local function check_context_timeout()
-        local current_time = os.clock() * 20
-        if current_time - last_message_time > CONTEXT_TIMEOUT then
-            debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
-            -- Reset to just the system message
-            messages = {
-                { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
-            }
-            return true
-        end
-        return false
-    end
-
-    -- Function to check if we should listen to all messages
-    local function should_listen_to_message(message)
-        local current_time = os.clock() * 20
-        
-        -- Check if listen mode has expired
-        if in_listen_mode and current_time > listen_mode_end_time then
-            in_listen_mode = false
-            debug.info("Listen mode ended")
-        end
-        
-        -- If bot is mentioned, enter listen mode
-        if is_bot_mentioned(message) then
-            in_listen_mode = true
-            listen_mode_end_time = current_time + LISTEN_MODE_TIMEOUT
-            debug.info("Bot mentioned - entering listen mode for " .. LISTEN_MODE_TIMEOUT / 20 / 60 .. " minutes")
-            return true
-        end
-        
-        -- If in listen mode, listen to all messages
-        if in_listen_mode then
-            debug.debug("Listening due to active listen mode")
-            return true
-        end
-        
-        return false
-    end
-
-    -- Advanced chat handling variables
-    local pending_messages = {}  -- Messages waiting to be processed
-    local llm_request_active = false  -- Track if LLM request is in progress
-    local llm_request_start_time = 0  -- When the current LLM request started
-    local LLM_TIMEOUT = 30 * 20  -- 30 seconds in ticks
-
-    while true do
-        -- Process the chatbox queue
-        chatbox_queue.process()
-        
-        -- Show queue status if there are messages waiting
-        local queue_size = chatbox_queue.getQueueSize()
-        if queue_size > 0 then
-            debug.debug("Messages in queue: " .. queue_size)
-        end
-        
-        -- Use timer-based event handling for proper timeout support
-        local timer_id = os.startTimer(0.05)  -- 50ms timer for queue processing
-        local event_data = {os.pullEvent()}
-        
-        if event_data[1] == "timer" and event_data[2] == timer_id then
-            -- Timer event - just continue to process queue
-            goto continue
-        elseif event_data[1] == "chat" then
-            local _, player, message_text = table.unpack(event_data)
-            local bot_name = tools.get_bot_name()
-            local current_time = os.clock() * 20
-
-            -- Check for context timeout before processing message
-            check_context_timeout()
-
-            -- Check if we should respond to this message
-            if should_listen_to_message(message_text) then
-                debug.info(player .. " says: " .. message_text)
-                
-                -- Update last message time
-                last_message_time = current_time
-                
-                -- Add message to pending queue
-                table.insert(pending_messages, {
-                    player = player,
-                    text = message_text,
-                    timestamp = current_time
-                })
-                
-                -- If LLM is currently processing, cancel it and restart with all pending messages
-                if llm_request_active then
-                    debug.warn("New message received while processing. Cancelling current request...")
-                    llm_request_active = false
-                    -- Note: We can't actually cancel HTTP requests in ComputerCraft, 
-                    -- but we'll ignore the response when it comes back
-                end
-                
-                -- Process all pending messages
-                if not llm_request_active then
-                    -- Add all pending messages to conversation
-                    for _, pending_msg in ipairs(pending_messages) do
-                        local formatted_msg = pending_msg.player .. ": " .. pending_msg.text
-                        table.insert(messages, { role = "user", content = formatted_msg })
-                    end
-                    
-                    -- Clear pending messages
-                    pending_messages = {}
-                    
-                    -- Start LLM request
-                    llm_request_active = true
-                    llm_request_start_time = current_time
-                    debug.info("Thinking...")
-                    
-                    -- Use parallel.waitForAny to handle the LLM request with timeout
-                    local function llm_task()
-                        local ok, response = llm.request(get_api_key_for_provider(), config.model, messages, tool_schemas)
-                        return ok, response
-                    end
-                    
-                    local function timeout_task()
-                        sleep(LLM_TIMEOUT / 20)  -- Convert ticks to seconds
-                        return false, "timeout"
-                    end
-                    
-                    local ok, response
-                    parallel.waitForAny(
-                        function()
-                            ok, response = llm_task()
-                        end,
-                        timeout_task
-                    )
-                    
-                    llm_request_active = false
-                    
-                    if not ok then
-                        if response == "timeout" then
-                            printError("LLM Request Timed Out")
-                            chat.send("Sorry, my response took too long.")
-                        else
-                            printError("LLM Request Failed: " .. tostring(response))
-                            chat.send("Sorry, I encountered an error.")
-                        end
-                        -- Remove the failed user messages
-                        while #messages > 1 and messages[#messages].role == "user" do
-                            table.remove(messages)
-                        end
-                        goto continue
-                    end
-
-                    -- Process response using the new format
-                    process_llm_response(response, messages)
-                    
-                    -- Trim history if it gets too long
-                    if #messages > (config.history_limit or 20) then
-                        local trimmed_messages = {}
-                        table.insert(trimmed_messages, messages[1]) -- Keep system prompt
-                        for i = #messages - (config.history_limit or 20) + 2, #messages do
-                            table.insert(trimmed_messages, messages[i])
-                        end
-                        messages = trimmed_messages
-                        debug.info("History trimmed.")
-                    end
-                end
-            end
-        end
-        
-        ::continue::
+    print("Jarvis is online. Waiting for messages.")
+    debug.info("Current bot name: " .. tools.get_bot_name())
+    local build_info = fs.open("/etc/jarvis/build_info.txt", "r")
+    if build_info then
+        debug.info("Build: " .. build_info.readAll())
+        build_info.close()
     end
 end
 
-initialize() 
+local function main_loop()
+    while true do
+        local event, p1, p2, p3 = os.pullEvent()
+
+        if event == "chat" then
+            handle_chat_message(p1, p2)
+        end
+        
+        if listen_mode_active and os.time() > listen_until then
+            debug.info("Listen mode expired.")
+            listen_mode_active = false
+        end
+        
+        chatbox_queue.process(chatBox)
+        
+        sleep(0.1)
+    end
+end
+
+-- Main execution
+local ok, err = pcall(function()
+    initialize()
+    main_loop()
+end)
+
+if not ok then
+    debug.error("A critical error occurred: " .. tostring(err))
+    if chatBox then
+        pcall(function() chatBox.send("I've encountered a critical error and need to shut down.") end)
+    end
+    printError(err)
+end 
 ]]
 files["programs/lib/jarvis/debug.lua"] = [[
 -- debug.lua
@@ -2457,7 +2312,7 @@ return config
 
         print([[
 
-    Installation complete! Build #79 (2025-06-13 21:14:07 UTC)
+    Installation complete! Build #80 (2025-06-13 21:33:43 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
