@@ -1,281 +1,79 @@
 -- llm.lua
--- Handles communication with the OpenAI API.
+-- Handles communication with LLM APIs using a provider abstraction layer.
 
 local LLM = {}
 local debug = require("lib.jarvis.debug")
+local LLMConfig = require("config.llm_config")
+local ProviderFactory = require("providers.provider_factory")
 
-local API_URL = "https://api.openai.com/v1/responses"
+-- Test connectivity to the current provider
+function LLM.test_connectivity()
+    local provider_type = LLMConfig.get_provider()
+    local provider = ProviderFactory.create_provider(provider_type)
+    
+    debug.info("Testing connectivity for provider: " .. provider:get_name())
+    return provider:test_connectivity()
+end
 
--- Test basic connectivity to OpenAI
+-- Backward compatibility - test OpenAI specifically
 function LLM.test_openai_connectivity()
-    debug.debug("Testing basic connectivity to api.openai.com...")
-    
-    -- Try a simpler test - just check if we can resolve the domain
-    -- Instead of hitting the root, try a known endpoint that should return a proper error
-    local test_headers = {
-        ["User-Agent"] = "ComputerCraft",
-    }
-    
-    debug.debug("Attempting simple connectivity test...")
-    local success, response = http.get("https://api.openai.com/v1/models", test_headers)
-    
-    if success then
-        local body = response.readAll()
-        response.close()
-        debug.info("OpenAI API is reachable (got response from /v1/models)")
-        return true, "OpenAI API reachable"
-    else
-        local err_msg = "Cannot reach OpenAI API"
-        if response then
-            if type(response) == "string" then
-                err_msg = err_msg .. ": " .. response
-                debug.error("Error: " .. response)
-            end
-        end
-        debug.error(err_msg)
-        return false, err_msg
-    end
+    local provider = ProviderFactory.create_provider(ProviderFactory.PROVIDERS.OPENAI)
+    return provider:test_connectivity()
 end
 
--- Convert standard OpenAI messages format to the new input format
-local function convert_messages_to_input(messages)
-    local input = {}
-    
-    for _, message in ipairs(messages) do
-        if message.role == "tool" then
-            -- Tool result messages - add them as input_text
-            local converted_message = {
-                role = "user",  -- Tool results are treated as user input in the new format
-                content = {
-                    {
-                        type = "input_text",
-                        text = "Tool result for " .. (message.tool_call_id or "unknown") .. ": " .. (message.content or "No result")
-                    }
-                }
-            }
-            table.insert(input, converted_message)
-        else
-            local converted_message = {
-                role = message.role,
-                content = {}
-            }
-            
-            -- Add the main content
-            if message.content and message.content ~= "" then
-                table.insert(converted_message.content, {
-                    type = message.role == "assistant" and "output_text" or "input_text",
-                    text = message.content
-                })
-            end
-            
-            -- Note: We don't re-add tool calls to assistant messages in input format
-            -- The API handles tool calls differently in input vs output
-            -- Tool results are added separately as user messages
-            
-            -- Add id for assistant messages (required by the new format)
-            if message.role == "assistant" then
-                -- Use stored ID if available, otherwise generate a new one
-                if message.id then
-                    converted_message.id = message.id
-                    debug.debug("Using stored assistant message ID: " .. message.id)
-                else
-                    converted_message.id = "msg_" .. tostring(os.epoch("utc")) .. math.random(100000, 999999)
-                    debug.debug("Generated new assistant message ID: " .. converted_message.id)
-                end
-            end
-            
-            table.insert(input, converted_message)
-        end
-    end
-    
-    return input
-end
-
+-- Main request function - delegates to the configured provider
 function LLM.request(api_key, model, messages, tools)
-    debug.info("Starting LLM request...")
-    debug.debug("Target URL: " .. API_URL)
+    local provider_type = LLMConfig.get_provider()
+    debug.info("Using provider: " .. provider_type)
     
-    -- Check if HTTP is enabled
-    if not http then
-        debug.error("HTTP API not available")
-        return false, "HTTP API is not available. Ensure 'http_enable' is set to true in computercraft-common.toml"
-    end
-    debug.debug("HTTP API is available")
-    
-    -- Debug API key (show first/last 4 chars only for security)
-    debug.debug("API key format: " .. debug.mask_api_key(api_key))
-    if not api_key or #api_key <= 8 then
-        debug.error("API key appears invalid or too short")
-        return false, "Invalid API key format"
-    end
-    
-    debug.debug("Model: " .. tostring(model))
-    debug.debug("Messages count: " .. #messages)
-    
-    -- Use exact same headers as working curl example
-    local headers = {
-        ["Authorization"] = "Bearer " .. api_key,
-        ["Content-Type"] = "application/json"
-    }
-    debug.debug("Headers prepared (matching curl format)")
+    local provider = ProviderFactory.create_provider(provider_type)
+    return provider:request(api_key, model, messages, tools)
+end
 
-    -- Convert messages to the new input format
-    local input = convert_messages_to_input(messages)
+-- Make a request with a specific provider (overrides config)
+function LLM.request_with_provider(provider_type, api_key, model, messages, tools)
+    debug.info("Using specific provider: " .. provider_type)
     
-    -- Build body matching the working curl example
-    local body = {
-        model = model,
-        input = input,
-        text = {
-            format = {
-                type = "text"
-            }
-        },
-        reasoning = {},
-        tools = tools or {},
-        temperature = 1,
-        max_output_tokens = 2048,
-        top_p = 1,
-        store = true
-    }
-
-    debug.debug("Serializing request body...")
-    -- Use the same serialization as working GPT.lua example
-    local body_json = textutils.serializeJSON(body)
-    debug.debug("Used serializeJSON (matching GPT.lua)")
-    
-    -- Fix the tools field to be an empty array instead of empty object
-    body_json = body_json:gsub('"tools":{}', '"tools":[]')
-    debug.debug("Fixed tools field to be empty array")
-    
-    -- Fix required fields in tool parameters to be arrays instead of objects
-    body_json = body_json:gsub('"required":{}', '"required":[]')
-    debug.debug("Fixed required fields to be empty arrays")
-    
-    debug.debug("Request body serialized successfully")
-    debug.debug("Request size: " .. #body_json .. " bytes")
-    
-    -- Write comprehensive debug log
-    debug.debug("Writing comprehensive debug log...")
-    local debug_log = {
-        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
-        tick_time = os.clock(),
-        request = {
-            url = API_URL,
-            headers = headers,
-            body_raw = body,
-            body_json = body_json,
-            message_count = #messages,
-            messages = messages
-        },
-        response = nil,
-        error = nil,
-        success = false
-    }
-    
-    local function write_debug_log(additional_data)
-        if additional_data then
-            for k, v in pairs(additional_data) do
-                debug_log[k] = v
-            end
-        end
-        debug.write_json_log(debug_log, "Full HTTP request/response debug data")
+    if not ProviderFactory.is_valid_provider(provider_type) then
+        return false, "Invalid provider: " .. tostring(provider_type)
     end
     
-    -- Write initial debug state
-    write_debug_log()
-    
-    -- Also write the formatted JSON request separately for easy copying
-    debug.write_request(body_json)
-    
-    -- Validate JSON before sending
-    if not body_json or body_json == "" then
-        debug.error("Failed to serialize request body to JSON")
-        return false, "Failed to serialize request body to JSON"
-    end
-    
-    -- Show first 200 chars of request for debugging
-    debug.debug("Request preview: " .. debug.preview(body_json))
-    
-    debug.info("Making async HTTP request (matching curl pattern)...")
-    
-    -- Use exact same pattern as working GPT.lua example
-    http.request(API_URL, body_json, headers)
-    
-    debug.debug("HTTP request sent, waiting for response...")
-    
-    -- Wait for the response using event handling (exact same as GPT.lua)
-    while true do
-        local event, url, handle = os.pullEvent()
-        
-        if event == "http_success" then
-            debug.info("HTTP request successful, reading response...")
-            local response_body = handle.readAll()
-            handle.close()
-            debug.debug("Response received: " .. #response_body .. " bytes")
-            
-            -- Write the response to separate file for easy copying
-            debug.write_response(response_body)
-            
-            -- Show first 200 chars of response for debugging
-            debug.debug("Response preview: " .. debug.preview(response_body))
-            
-            debug.debug("Parsing JSON response...")
-            local response_data = textutils.unserializeJSON(response_body)
-            debug.debug("Used unserializeJSON (matching GPT.lua)")
+    local provider = ProviderFactory.create_provider(provider_type)
+    return provider:request(api_key, model, messages, tools)
+end
 
-            if not response_data then
-                debug.error("Failed to parse JSON response")
-                local error_msg = "Failed to decode JSON response from API: " .. tostring(response_body)
-                write_debug_log({
-                    error = error_msg,
-                    success = false,
-                    response_raw = response_body
-                })
-                return false, error_msg
-            end
-            debug.debug("JSON response parsed successfully")
-            
-            if response_data.error then
-                debug.error("API returned error: " .. response_data.error.message)
-                local error_msg = "API Error: " .. response_data.error.message
-                write_debug_log({
-                    error = error_msg,
-                    success = false,
-                    response = response_data,
-                    response_raw = response_body
-                })
-                return false, error_msg
-            end
+-- Configuration management functions
+function LLM.get_current_provider()
+    return LLMConfig.get_provider()
+end
 
-            debug.info("LLM request completed successfully")
-            write_debug_log({
-                success = true,
-                response = response_data,
-                response_raw = response_body
-            })
-            return true, response_data
-            
-        elseif event == "http_failure" then
-            debug.error("HTTP request failed with http_failure event")
-            local error_msg = "HTTP request failed (http_failure event)"
-            if handle then
-                if type(handle) == "string" then
-                    error_msg = error_msg .. ": " .. handle
-                    debug.error("Error details: " .. handle)
-                end
-            end
-            write_debug_log({
-                error = error_msg,
-                success = false,
-                http_failure_details = handle
-            })
-            return false, error_msg
-        end
-        
-        -- Continue waiting for our specific request response
-        -- (other events might occur that we don't care about)
+function LLM.set_provider(provider_type)
+    local success, message = LLMConfig.set_provider(provider_type)
+    if success then
+        LLMConfig.save_config()
+        debug.info("Provider switched to: " .. provider_type)
+    else
+        debug.error("Failed to set provider: " .. message)
     end
+    return success, message
+end
+
+function LLM.get_available_providers()
+    return LLMConfig.get_available_providers()
+end
+
+function LLM.print_config()
+    LLMConfig.print_config()
+end
+
+-- Save current configuration
+function LLM.save_config()
+    return LLMConfig.save_config()
+end
+
+-- Reset to default configuration
+function LLM.reset_config()
+    return LLMConfig.reset_to_defaults()
 end
 
 return LLM 
