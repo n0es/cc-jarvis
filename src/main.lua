@@ -5,7 +5,7 @@
 local llm = require("lib.jarvis.llm")
 local tools = require("lib.jarvis.tools")
 local chatbox_queue = require("lib.jarvis.chatbox_queue")
-local debug = require("debug")
+local debug = require("lib.jarvis.debug")
 
 -- Load config
 local CONFIG_PATH_LUA = "etc.jarvis.config"

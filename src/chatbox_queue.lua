@@ -5,7 +5,7 @@ local chatbox_queue = {}
 
 -- Load tools module for bot name management
 local tools = require("lib.jarvis.tools")
-local debug = require("debug")
+local debug = require("lib.jarvis.debug")
 
 -- Queue state
 local message_queue = {}

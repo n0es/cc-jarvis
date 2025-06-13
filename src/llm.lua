@@ -2,7 +2,7 @@
 -- Handles communication with the OpenAI API.
 
 local LLM = {}
-local debug = require("debug")
+local debug = require("lib.jarvis.debug")
 
 local API_URL = "https://api.openai.com/v1/responses"
 

@@ -2,7 +2,7 @@
 -- Defines the functions that the LLM can call.
 
 local Tools = {}
-local debug = require("debug")
+local debug = require("lib.jarvis.debug")
 
 -- A registry to hold the function definitions and their callable implementations.
 local registry = {}
