@@ -310,7 +310,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #70 (2025-06-13 09:28:24 UTC)")
+    debug.info("Build: #71 (2025-06-13 09:37:21 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -1691,45 +1691,76 @@ end
 local function convert_messages_to_contents(messages)
     local contents = {}
     local system_instruction = nil
-    
+
+    -- First pass to map tool call IDs to function names for Gemini's required format
+    local tool_call_id_to_name = {}
+    for _, message in ipairs(messages) do
+        if message.role == "assistant" and message.tool_calls then
+            for _, tool_call in ipairs(message.tool_calls) do
+                if tool_call.id and tool_call.function and tool_call.function.name then
+                    tool_call_id_to_name[tool_call.id] = tool_call.function.name
+                end
+            end
+        end
+    end
+
     for _, message in ipairs(messages) do
         if message.role == "system" then
-            -- Extract system instruction separately
-            system_instruction = {
-                parts = {
-                    {
-                        text = message.content or ""
-                    }
-                }
-            }
+            system_instruction = { parts = { { text = message.content or "" } } }
+
         elseif message.role == "user" then
             table.insert(contents, {
                 role = "user",
-                parts = {
-                    {
-                        text = message.content or ""
-                    }
-                }
+                parts = { { text = message.content or "" } }
             })
+            
         elseif message.role == "assistant" then
-            table.insert(contents, {
-                role = "model",  -- Gemini uses "model" instead of "assistant"
-                parts = {
-                    {
-                        text = message.content or ""
-                    }
-                }
-            })
+            if message.tool_calls and #message.tool_calls > 0 then
+                -- This is a tool-calling turn from the assistant
+                local parts = {}
+                for _, tool_call in ipairs(message.tool_calls) do
+                    if tool_call.function then
+                        local args = textutils.unserializeJSON(tool_call.function.arguments or "{}") or {}
+                        table.insert(parts, {
+                            functionCall = {
+                                name = tool_call.function.name,
+                                args = args
+                            }
+                        })
+                    end
+                end
+                if #parts > 0 then
+                    table.insert(contents, { role = "model", parts = parts })
+                end
+            elseif message.content and message.content ~= "" then
+                -- This is a standard text response from the assistant
+                table.insert(contents, { role = "model", parts = { { text = message.content } } })
+            end
+
         elseif message.role == "tool" then
-            -- Tool results - add as user message
-            table.insert(contents, {
-                role = "user",
-                parts = {
-                    {
-                        text = "Tool result: " .. (message.content or "No result")
+            local func_name = tool_call_id_to_name[message.tool_call_id]
+            if func_name then
+                local response_data = textutils.unserializeJSON(message.content or "")
+                -- Gemini expects the 'response' to be a JSON object.
+                -- If the tool returned a raw string, wrap it in a table.
+                if not response_data then
+                    response_data = { result = message.content or "empty result" }
+                end
+                
+                table.insert(contents, {
+                    role = "tool",
+                    parts = {
+                        {
+                            functionResponse = {
+                                name = func_name,
+                                response = response_data
+                            }
+                        }
                     }
-                }
-            })
+                })
+            else
+                debug.warn("Orphaned tool call response found for ID: " .. tostring(message.tool_call_id))
+            end
         end
     end
     
@@ -2462,7 +2493,7 @@ return config
 
         print([[
 
-    Installation complete! Build #70 (2025-06-13 09:28:24 UTC)
+    Installation complete! Build #71 (2025-06-13 09:37:21 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
