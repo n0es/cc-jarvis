@@ -158,6 +158,12 @@ local function main()
         return false
     end
 
+    -- Advanced chat handling variables
+    local pending_messages = {}  -- Messages waiting to be processed
+    local llm_request_active = false  -- Track if LLM request is in progress
+    local llm_request_start_time = 0  -- When the current LLM request started
+    local LLM_TIMEOUT = 30 * 20  -- 30 seconds in ticks
+
     while true do
         -- Process the chatbox queue
         chatbox_queue.process()
@@ -168,10 +174,14 @@ local function main()
             print("[DEBUG] Messages in queue: " .. queue_size)
         end
         
-        -- Use pullEventRaw with timeout to allow queue processing
-        local event_data = {os.pullEventRaw(0.1)}  -- 0.1 second timeout
+        -- Use timer-based event handling for proper timeout support
+        local timer_id = os.startTimer(0.05)  -- 50ms timer for queue processing
+        local event_data = {os.pullEvent()}
         
-        if event_data[1] == "chat" then
+        if event_data[1] == "timer" and event_data[2] == timer_id then
+            -- Timer event - just continue to process queue
+            goto continue
+        elseif event_data[1] == "chat" then
             local _, player, message_text = table.unpack(event_data)
             local bot_name = tools.get_bot_name()
             local current_time = os.clock() * 20
@@ -181,61 +191,89 @@ local function main()
 
             -- Check if we should respond to this message
             if should_listen_to_message(message_text) then
-            print(player .. " says: " .. message_text)
-            
-            -- Update last message time
-            last_message_time = current_time
-            
-            table.insert(messages, { role = "user", content = message_text })
-
-            -- Call the LLM (without tools for now)
-            print("Thinking...")
-            local ok, response = llm.request(config.openai_api_key, config.model, messages) -- removed tool_schemas parameter
-
-            if not ok then
-                printError("LLM Request Failed: " .. tostring(response))
-                chat.send("Sorry, I encountered an error.")
-                table.remove(messages) -- Remove the failed user message
-                goto continue
-            end
-
-            -- Process response using the new format
-            local result = process_llm_response(response)
-            print("[DEBUG] About to send message to chat: " .. tostring(result))
-            chat.send(tostring(result))
-            print("[DEBUG] Message queued for chat")
-            table.insert(messages, { role = "assistant", content = result })
-
-            --[[
-            -- Comment out tool handling for now
-            local result = process_llm_response(response)
-
-            if type(result) == "table" then
-                -- The LLM called a tool, so we add its output to the conversation and run again.
-                for _, tool_output in ipairs(result) do
-                    table.insert(messages, tool_output)
+                print(player .. " says: " .. message_text)
+                
+                -- Update last message time
+                last_message_time = current_time
+                
+                -- Add message to pending queue
+                table.insert(pending_messages, {
+                    player = player,
+                    text = message_text,
+                    timestamp = current_time
+                })
+                
+                -- If LLM is currently processing, cancel it and restart with all pending messages
+                if llm_request_active then
+                    print("[INFO] New message received while processing. Cancelling current request...")
+                    llm_request_active = false
+                    -- Note: We can't actually cancel HTTP requests in ComputerCraft, 
+                    -- but we'll ignore the response when it comes back
                 end
                 
-                local final_ok, final_response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
-                if final_ok then
-                    local final_message = final_response.choices[1].message.content
-                    chatBox.sendMessage(final_message, bot_name, "<>")  
-                    table.insert(messages, { role = "assistant", content = final_message })
-                else
-                    printError("Second LLM Request Failed: " .. tostring(final_response))
-                    chatBox.sendMessage("Sorry, I encountered an error after using my tool.", bot_name, "<>")
+                -- Process all pending messages
+                if not llm_request_active then
+                    -- Add all pending messages to conversation
+                    for _, pending_msg in ipairs(pending_messages) do
+                        local formatted_msg = pending_msg.player .. ": " .. pending_msg.text
+                        table.insert(messages, { role = "user", content = formatted_msg })
+                    end
+                    
+                    -- Clear pending messages
+                    pending_messages = {}
+                    
+                    -- Start LLM request
+                    llm_request_active = true
+                    llm_request_start_time = current_time
+                    print("Thinking...")
+                    
+                    -- Use parallel.waitForAny to handle the LLM request with timeout
+                    local function llm_task()
+                        local ok, response = llm.request(config.openai_api_key, config.model, messages)
+                        return ok, response
+                    end
+                    
+                    local function timeout_task()
+                        sleep(LLM_TIMEOUT / 20)  -- Convert ticks to seconds
+                        return false, "timeout"
+                    end
+                    
+                    local ok, response
+                    parallel.waitForAny(
+                        function()
+                            ok, response = llm_task()
+                        end,
+                        timeout_task
+                    )
+                    
+                    llm_request_active = false
+                    
+                    if not ok then
+                        if response == "timeout" then
+                            printError("LLM Request Timed Out")
+                            chat.send("Sorry, my response took too long.")
+                        else
+                            printError("LLM Request Failed: " .. tostring(response))
+                            chat.send("Sorry, I encountered an error.")
+                        end
+                        -- Remove the failed user messages
+                        while #messages > 1 and messages[#messages].role == "user" do
+                            table.remove(messages)
+                        end
+                        goto continue
+                    end
+
+                    -- Process response using the new format
+                    local result = process_llm_response(response)
+                    print("[DEBUG] About to send message to chat: " .. tostring(result))
+                    chat.send(tostring(result))
+                    print("[DEBUG] Message queued for chat")
+                    table.insert(messages, { role = "assistant", content = result })
                 end
-
-            elseif type(result) == "string" then
-                -- The LLM returned a direct message.
-                chatBox.sendMessage(result, bot_name, "<>")
-                table.insert(messages, { role = "assistant", content = result })
-            end
-            --]]
-
-                ::continue::
             end
         end
+        
+        ::continue::
     end
 end
 
