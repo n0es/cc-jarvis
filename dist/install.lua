@@ -70,232 +70,119 @@ local function get_api_key_for_provider()
     end
 end
 
--- Extract response content and metadata from the new API format
-local function extract_response_data(response_data)
-    -- Handle the new API format where function calls are in response.output directly
-    if response_data.output and type(response_data.output) == "table" and #response_data.output > 0 then
-        local result = {
-            id = nil, -- Function calls don't have a single message ID
-            tool_calls = {},
-            content = nil
-        }
-        
-        -- Process all output items
-        for _, output_item in ipairs(response_data.output) do
-            if output_item.type == "message" then
-                -- This is a text message
-                result.id = output_item.id
-                if output_item.content and type(output_item.content) == "table" and #output_item.content > 0 then
-                    for _, content_obj in ipairs(output_item.content) do
-                        if content_obj.type == "output_text" and content_obj.text then
-                            result.content = content_obj.text
-                        end
-                    end
-                end
-            elseif output_item.type == "function_call" then
-                -- This is a function call in the new format
-                table.insert(result.tool_calls, {
-                    id = output_item.call_id or output_item.id or ("call_" .. os.epoch("utc") .. math.random(1000, 9999)),
-                    type = "function",
-                    ["function"] = {
-                        name = output_item.name,
-                        arguments = output_item.arguments or "{}"
-                    }
-                })
-            end
-        end
-        
-        return result
+local function process_llm_response(response_parts, messages_history)
+    debug.debug("Processing LLM response with " .. #response_parts .. " parts...")
+    if #response_parts == 0 then
+        debug.error("LLM response was empty.")
+        chatbox_queue.add_message("I'm sorry, I seem to be having trouble thinking straight right now.")
+        return
     end
-    
-    -- Fallback to standard OpenAI format if available
-    if response_data.choices and #response_data.choices > 0 then
-        local choice = response_data.choices[1]
-        if choice.message then
-            return {
-                content = choice.message.content,
-                tool_calls = choice.message.tool_calls or {},
-                id = nil  -- Standard format doesn't have IDs
-            }
-        end
-    end
-    
-    -- Handle Gemini format with candidates
-    if response_data.candidates and #response_data.candidates > 0 then
-        local candidate = response_data.candidates[1]
-        if candidate.content and candidate.content.parts then
-            local content = ""
-            local tool_calls = {}
-            
-            -- Extract text content from parts
-            for _, part in ipairs(candidate.content.parts) do
-                if part.text then
-                    content = content .. part.text
-                elseif part.functionCall then
-                    -- Handle Gemini function calls
-                    table.insert(tool_calls, {
-                        id = "call_" .. os.epoch("utc") .. math.random(1000, 9999),
-                        type = "function",
-                        ["function"] = {
-                            name = part.functionCall.name,
-                            arguments = textutils.serializeJSON(part.functionCall.args or {})
-                        }
-                    })
-                end
-            end
-            
-            -- Trim trailing whitespace from the final content
-            content = content:gsub("%s+$", "")
-            
-            return {
-                content = content,
-                tool_calls = tool_calls,
-                id = response_data.responseId
-            }
-        end
-    end
-    
-    return nil
-end
 
-local function process_llm_response(response_data)
-    -- Try to extract content using the new format
-    debug.debug("Processing LLM response...")
-    local response_info = extract_response_data(response_data)
-    if not response_info then
-        debug.error("Failed to extract content from response")
-        return {
-            content = "I received a response but couldn't parse it properly.",
-            id = nil,
-            tool_calls = {}
-        }
-    end
-    
-    -- Check if there are tool calls to execute
-    if response_info.tool_calls and #response_info.tool_calls > 0 then
-        debug.info("Processing " .. #response_info.tool_calls .. " tool call(s)")
-        
-        local tool_results = {}
-        local all_results_text = {}
-        
-        for _, tool_call in ipairs(response_info.tool_calls) do
-            local function_name = tool_call["function"].name
-            local arguments_json = tool_call["function"].arguments
+    local assistant_message_content = {} -- Collects text parts for a single assistant message
+    local tool_calls_for_this_turn = {}
+
+    for _, part in ipairs(response_parts) do
+        if part.type == "message" then
+            debug.info("LLM response part: message")
+            chatbox_queue.add_message(part.content)
+            table.insert(assistant_message_content, part.content)
+
+        elseif part.type == "tool_call" then
+            debug.info("LLM response part: tool_call - " .. part.tool_name)
             
-            debug.debug("Executing tool: " .. function_name)
-            debug.debug("Arguments: " .. arguments_json)
+            local tool_func = tools.get_tool(part.tool_name)
+            local tool_call_id = "call_" .. os.epoch("utc") .. math.random(1000, 9999)
             
-            -- Get the tool function
-            local tool_func = tools.get_tool(function_name)
+            table.insert(tool_calls_for_this_turn, {
+                id = tool_call_id,
+                type = "function",
+                ["function"] = {
+                    name = part.tool_name,
+                    arguments = part.tool_args_json or "{}"
+                }
+            })
+            
             if not tool_func then
-                local error_msg = "Unknown tool: " .. function_name
+                local error_msg = "Unknown tool: " .. part.tool_name
                 debug.error(error_msg)
-                table.insert(tool_results, {
-                    tool_call_id = tool_call.id,
+                table.insert(messages_history, {
+                    tool_call_id = tool_call_id,
                     role = "tool",
                     content = error_msg
                 })
-                table.insert(all_results_text, error_msg)
             else
-                -- Parse arguments
-                local arguments = {}
-                if arguments_json and arguments_json ~= "{}" then
-                    arguments = textutils.unserializeJSON(arguments_json)
-                    if not arguments then
-                        local error_msg = "Failed to parse tool arguments: " .. arguments_json
-                        debug.error(error_msg)
-                        table.insert(tool_results, {
-                            tool_call_id = tool_call.id,
-                            role = "tool",
-                            content = error_msg
-                        })
-                        table.insert(all_results_text, error_msg)
-                        goto continue_tool_loop
-                    end
-                end
-                
-                -- Execute the tool
+                local arguments = textutils.unserializeJSON(part.tool_args_json or "{}") or {}
                 local success, result = pcall(tool_func, arguments)
-                if success then
-                    local result_text = type(result) == "table" and textutils.serializeJSON(result) or tostring(result)
-                    debug.info("Tool " .. function_name .. " executed successfully")
-                    debug.debug("Tool result: " .. result_text)
-                    
-                    -- Check if personality was changed and update system prompt
-                    if function_name == "change_personality" then
-                        debug.info("Personality changed, updating system prompt in history...")
-                        if #messages > 0 and messages[1].role == "system" then
-                            messages[1].content = llm.get_system_prompt(tools.get_bot_name())
-                            debug.info("System prompt updated to: " .. llm.get_current_personality())
-                        end
-                    end
+                local result_text = ""
 
-                    table.insert(tool_results, {
-                        tool_call_id = tool_call.id,
-                        role = "tool",
-                        content = result_text
-                    })
-                    
-                    -- Format result for display
+                if success then
+                    result_text = type(result) == "table" and textutils.serializeJSON(result) or tostring(result)
+                    debug.info("Tool " .. part.tool_name .. " executed successfully. Result: " .. result_text)
                     if type(result) == "table" and result.message then
-                        table.insert(all_results_text, result.message)
-                    else
-                        table.insert(all_results_text, result_text)
+                        chatbox_queue.add_message(result.message)
                     end
                 else
-                    local error_msg = "Tool execution failed: " .. tostring(result)
-                    debug.error(error_msg)
-                    table.insert(tool_results, {
-                        tool_call_id = tool_call.id,
-                        role = "tool",
-                        content = error_msg
-                    })
-                    table.insert(all_results_text, error_msg)
+                    result_text = "Tool execution failed: " .. tostring(result)
+                    debug.error(result_text)
+                    chatbox_queue.add_message(result_text)
                 end
-            end
-            
-            ::continue_tool_loop::
-        end
-        
-        -- Combine content and tool results for display
-        local display_content = ""
-        if response_info.content and response_info.content ~= "" then
-            display_content = response_info.content
-        end
-        
-        if #all_results_text > 0 then
-            local results_str = table.concat(all_results_text, " | ")
-            if display_content ~= "" then
-                display_content = display_content .. " " .. results_str
-            else
-                display_content = results_str
+                table.insert(messages_history, {
+                    tool_call_id = tool_call_id,
+                    role = "tool",
+                    content = result_text
+                })
             end
         end
-        
-        return {
-            content = display_content,
-            id = response_info.id,
-            tool_calls = response_info.tool_calls,
-            tool_results = tool_results
-        }
-    else
-        -- No tool calls, just return the content
-        if response_info.content then
-            debug.debug("Successfully extracted content: " .. response_info.content)
-            return response_info
-        else
-            debug.warn("No content or tool calls in response")
-            return {
-                content = "I received a response but it was empty.",
-                id = response_info.id,
-                tool_calls = {}
-            }
-        end
+    end
+    
+    -- Store the assistant's turn (text and tool calls combined)
+    if #assistant_message_content > 0 or #tool_calls_for_this_turn > 0 then
+        table.insert(messages_history, {
+            role = "assistant",
+            content = table.concat(assistant_message_content, " "),
+            tool_calls = #tool_calls_for_this_turn > 0 and tool_calls_for_this_turn or nil
+        })
+        debug.debug("Stored assistant message to history.")
     end
 end
 
+local function handle_chat_message(username, message_text)
+    -- Check if the bot was mentioned or if it should be actively listening
+    local bot_name = tools.get_bot_name()
+    local msg_lower = message_text:lower()
+    if msg_lower:find(bot_name, 1, true) ~= nil then
+        debug.info("Bot mentioned - entering listen mode")
+        -- Enter listen mode
+        -- Implement listen mode logic here
+    else
+        debug.info("Thinking...")
+        local success, response_data = llm.request(get_api_key_for_provider(), config.model, messages, tools.get_tools())
+        
+        if success then
+            process_llm_response(response_data, messages)
+        else
+            local error_message = "Sorry, I encountered an error."
+            if type(response_data) == "string" then
+                error_message = response_data
+            end
+            chatbox_queue.add_message(error_message)
+            debug.error("LLM request failed: " .. error_message)
+        end
+    end
 
-local function main()
+    -- Trim history if it gets too long
+    if #messages > (config.history_limit or 20) then
+        local trimmed_messages = {}
+        table.insert(trimmed_messages, messages[1]) -- Keep system prompt
+        for i = #messages - (config.history_limit or 20) + 2, #messages do
+            table.insert(trimmed_messages, messages[i])
+        end
+        messages = trimmed_messages
+        debug.info("History trimmed.")
+    end
+end
+
+local function initialize()
     local chatBox = peripheral.find("chatBox")
     if not chatBox then
         error("Could not find a 'chatBox' peripheral. Please place one next to the computer.", 0)
@@ -319,7 +206,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #78 (2025-06-13 20:03:07 UTC)")
+    debug.info("Build: #79 (2025-06-13 21:14:07 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -491,38 +378,17 @@ local function main()
                     end
 
                     -- Process response using the new format
-                    local result = process_llm_response(response)
-                    debug.debug("About to send message to chat: " .. tostring(result.content))
-                    chat.send(tostring(result.content))
-                    debug.debug("Message queued for chat")
+                    process_llm_response(response, messages)
                     
-                    -- Only store assistant message if there's actual content or a valid ID
-                    -- Function-only responses don't need to be stored as assistant messages
-                    if result.content and result.content ~= "" and result.id then
-                        local assistant_message = { 
-                            role = "assistant", 
-                            content = result.content,
-                            id = result.id
-                        }
-                        
-                        -- Add tool calls to the assistant message if present
-                        if result.tool_calls and #result.tool_calls > 0 then
-                            assistant_message.tool_calls = result.tool_calls
-                            debug.debug("Stored " .. #result.tool_calls .. " tool calls with assistant message")
+                    -- Trim history if it gets too long
+                    if #messages > (config.history_limit or 20) then
+                        local trimmed_messages = {}
+                        table.insert(trimmed_messages, messages[1]) -- Keep system prompt
+                        for i = #messages - (config.history_limit or 20) + 2, #messages do
+                            table.insert(trimmed_messages, messages[i])
                         end
-                        
-                        table.insert(messages, assistant_message)
-                        debug.debug("Stored assistant message with ID: " .. result.id)
-                    else
-                        debug.debug("Skipping assistant message storage (function-only response or no ID)")
-                    end
-                    
-                    -- Add tool results to conversation history if there were tool calls
-                    if result.tool_results and #result.tool_results > 0 then
-                        for _, tool_result in ipairs(result.tool_results) do
-                            table.insert(messages, tool_result)
-                            debug.debug("Stored tool result for call ID: " .. tool_result.tool_call_id)
-                        end
+                        messages = trimmed_messages
+                        debug.info("History trimmed.")
                     end
                 end
             end
@@ -532,7 +398,7 @@ local function main()
     end
 end
 
-main() 
+initialize() 
 ]]
 files["programs/lib/jarvis/debug.lua"] = [[
 -- debug.lua
@@ -2591,7 +2457,7 @@ return config
 
         print([[
 
-    Installation complete! Build #78 (2025-06-13 20:03:07 UTC)
+    Installation complete! Build #79 (2025-06-13 21:14:07 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
