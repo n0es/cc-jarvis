@@ -62,4 +62,4 @@ function ProviderFactory.is_valid_provider(provider_type)
     return false
 end
 
-return ProviderFactory 
+return ProviderFactory
