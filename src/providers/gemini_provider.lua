@@ -108,12 +108,18 @@ local function convert_tools_to_function_declarations(tools)
     for _, tool_schema in ipairs(tools) do
         -- The schema from tools.lua is already in the format Gemini expects for a function declaration.
         if tool_schema.type == "function" and tool_schema.name then
+            -- Ensure parameters are correctly formatted for Gemini API
+            local parameters = tool_schema.parameters or { type = "object", properties = {} }
+            if not parameters.required or type(parameters.required) ~= "table" then
+                parameters.required = {} -- Ensure 'required' is an array (empty table for JSON array)
+            end
+            
             -- Manually build the FunctionDeclaration to ensure only valid fields are included.
             -- The Gemini API is strict and rejects unknown fields like "type" or "strict".
             local declaration = {
                 name = tool_schema.name,
                 description = tool_schema.description,
-                parameters = tool_schema.parameters
+                parameters = parameters
             }
             table.insert(function_declarations, declaration)
         end
@@ -168,8 +174,7 @@ function GeminiProvider:request(api_key, model, messages, tools)
             temperature = 1,
             topP = 0.95,
             topK = 64,
-            maxOutputTokens = 8192,
-            responseMimeType = "text/plain"
+            maxOutputTokens = 8192
         }
     }
     
@@ -305,30 +310,16 @@ function GeminiProvider:request(api_key, model, messages, tools)
             
         elseif event == "http_failure" then
             debug.error("HTTP request failed with http_failure event")
-            local error_msg = "HTTP request failed"
-            local response_body = ""
-            
+            local error_msg = "HTTP request failed (http_failure event)"
             if handle then
-                -- The handle is a readable object containing the error response body
-                response_body = handle.readAll()
-                handle.close()
-                
-                -- Attempt to parse for a more detailed error message
-                local error_data = textutils.unserializeJSON(response_body)
-                if error_data and error_data.error and error_data.error.message then
-                    error_msg = "Gemini API Error: " .. error_data.error.message
-                    debug.error("Detailed API Error: " .. error_data.error.message)
-                else
-                    -- Fallback to raw response if not parsable JSON with expected structure
-                    error_msg = "HTTP request failed: " .. response_body
-                    debug.error("Error details: " .. response_body)
+                if type(handle) == "string" then
+                    error_msg = error_msg .. ": " .. handle
+                    debug.error("Error details: " .. handle)
                 end
             end
-            
             write_debug_log({
                 error = error_msg,
                 success = false,
-                response_raw = response_body,
                 http_failure_details = handle
             })
             return false, error_msg
