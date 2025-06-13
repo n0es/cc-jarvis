@@ -182,9 +182,13 @@ local function main()
             -- Process response using the new format
             local result = process_llm_response(response)
             print("[DEBUG] About to send message to chat: " .. tostring(result))
-            chatBox.sendMessage(tostring(result), bot_name, "<>")
-            print("[DEBUG] Message sent to chat successfully")
-            table.insert(messages, { role = "assistant", content = result })
+            local ok, err = chatBox.sendMessage(tostring(result), bot_name, "<>")
+            if not ok then
+                print("[DEBUG] Error sending message to chat: " .. tostring(err))
+            else
+                print("[DEBUG] Message sent to chat successfully")
+                table.insert(messages, { role = "assistant", content = result })
+            end
 
             --[[
             -- Comment out tool handling for now
