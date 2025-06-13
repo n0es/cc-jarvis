@@ -12,7 +12,7 @@
 local llm = require("lib.jarvis.llm")
 local tools = require("lib.jarvis.tools")
 local chatbox_queue = require("lib.jarvis.chatbox_queue")
-local debug = require("debug")
+local debug = require("lib.jarvis.debug")
 
 -- Load config
 local CONFIG_PATH_LUA = "etc.jarvis.config"
@@ -467,7 +467,7 @@ files["programs/lib/jarvis/tools.lua"] = [[
 -- Defines the functions that the LLM can call.
 
 local Tools = {}
-local debug = require("debug")
+local debug = require("lib.jarvis.debug")
 
 -- A registry to hold the function definitions and their callable implementations.
 local registry = {}
@@ -678,7 +678,7 @@ files["programs/lib/jarvis/llm.lua"] = [[
 -- Handles communication with the OpenAI API.
 
 local LLM = {}
-local debug = require("debug")
+local debug = require("lib.jarvis.debug")
 
 local API_URL = "https://api.openai.com/v1/responses"
 
@@ -932,7 +932,7 @@ local chatbox_queue = {}
 
 -- Load tools module for bot name management
 local tools = require("lib.jarvis.tools")
-local debug = require("debug")
+local debug = require("lib.jarvis.debug")
 
 -- Queue state
 local message_queue = {}
