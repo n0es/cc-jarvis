@@ -105,9 +105,12 @@ local function convert_tools_to_function_declarations(tools)
 
     local function_declarations = {}
 
-    for _, tool in ipairs(tools) do
-        if tool.type == "function" and tool["function"] then
-            table.insert(function_declarations, tool["function"])
+    for _, tool_schema in ipairs(tools) do
+        -- The schema from tools.lua is already in the format Gemini expects for a function declaration.
+        if tool_schema.type == "function" and tool_schema.name then
+            -- We can directly use the schema. Gemini calls this a "FunctionDeclaration".
+            -- The structure from tools.lua matches what Gemini needs.
+            table.insert(function_declarations, tool_schema)
         end
     end
 
