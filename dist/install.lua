@@ -50,8 +50,24 @@ else
     error(err_msg, 0)
 end
 
-if not config.openai_api_key or config.openai_api_key == "YOUR_API_KEY_HERE" then
-    error("API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
+if not config.openai_api_key or config.openai_api_key == "YOUR_OPENAI_KEY_HERE" then
+    error("OpenAI API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
+end
+
+if not config.gemini_api_key or config.gemini_api_key == "YOUR_GEMINI_KEY_HERE" then
+    error("Gemini API key is not set in " .. CONFIG_PATH_FS .. ". Please add your Gemini API key.", 0)
+end
+
+-- Helper function to get the appropriate API key for the current provider
+local function get_api_key_for_provider()
+    local current_provider = llm.get_current_provider()
+    if current_provider == "openai" then
+        return config.openai_api_key
+    elseif current_provider == "gemini" then
+        return config.gemini_api_key
+    else
+        error("Unknown provider: " .. tostring(current_provider), 0)
+    end
 end
 
 -- Extract response content and metadata from the new API format
@@ -259,7 +275,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #57 (2025-06-13 07:48:59 UTC)")
+    debug.info("Build: #58 (2025-06-13 08:02:01 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -291,7 +307,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #57 built on 2025-06-13 07:48:59 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #58 built on 2025-06-13 08:02:01 UTC]" }
             }
             return true
         end
@@ -396,7 +412,7 @@ local function main()
                     
                     -- Use parallel.waitForAny to handle the LLM request with timeout
                     local function llm_task()
-                        local ok, response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
+                        local ok, response = llm.request(get_api_key_for_provider(), config.model, messages, tool_schemas)
                         return ok, response
                     end
                     
@@ -713,19 +729,41 @@ print()
 --[[
 -- Make requests to both providers
 print("===== Live API Comparison =====")
-print("(Uncomment API key sections to test)")
 
--- You would need to set up API keys:
--- local openai_key = "your-openai-api-key"
--- local gemini_key = "your-gemini-api-key"
+-- Load config to get API keys
+local config_file = loadfile("/etc/jarvis/config.lua")
+if config_file then
+    local config = config_file()
+    
+    local example_messages = {
+        {
+            role = "user", 
+            content = "Say hello and tell me which AI you are!"
+        }
+    }
 
--- OpenAI request:
--- LLM.set_provider("openai")
--- local success, response = LLM.request(openai_key, "gpt-4o", example_messages)
+    -- OpenAI request:
+    print("Making request to OpenAI...")
+    LLM.set_provider("openai")
+    local success, response = LLM.request(config.openai_api_key, "gpt-4o", example_messages)
+    if success then
+        print("✓ OpenAI responded!")
+    else
+        print("✗ OpenAI failed: " .. tostring(response))
+    end
 
--- Gemini request:
--- LLM.set_provider("gemini")
--- local success, response = LLM.request(gemini_key, "gemini-2.0-flash", example_messages)
+    -- Gemini request:
+    print("Making request to Gemini...")
+    LLM.set_provider("gemini")
+    local success, response = LLM.request(config.gemini_api_key, "gemini-1.5-flash", example_messages)
+    if success then
+        print("✓ Gemini responded!")
+    else
+        print("✗ Gemini failed: " .. tostring(response))
+    end
+else
+    print("Could not load config file")
+end
 --]]
 
 print("===== Demo Complete =====")
@@ -1004,6 +1042,71 @@ end
 
 return Tools 
 ]]
+files["programs/lib/jarvis/test_gemini_format.lua"] = [=[
+-- test_gemini_format.lua
+-- Test script to show exact Gemini request format
+
+local LLM = require("lib.jarvis.llm")
+
+print("===== Gemini Request Format Test =====")
+print()
+
+-- Switch to Gemini
+LLM.set_provider("gemini")
+
+-- Sample messages like Jarvis would send
+local test_messages = {
+    {
+        role = "system",
+        content = "You are jarvis, a helpful assistant."
+    },
+    {
+        role = "user", 
+        content = "b0op3r: hiii jarvisss"
+    }
+}
+
+print("Input messages (OpenAI format):")
+for i, msg in ipairs(test_messages) do
+    print("  " .. i .. ". " .. msg.role .. ": " .. msg.content)
+end
+
+print()
+print("Expected Gemini format (after conversion):")
+print([[
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [{"text": "System instructions: You are jarvis, a helpful assistant."}]
+    },
+    {
+      "role": "user", 
+      "parts": [{"text": "b0op3r: hiii jarvisss"}]
+    }
+  ],
+  "generationConfig": {
+    "responseMimeType": "text/plain"
+  },
+  "tools": [...]
+}
+]])
+
+print()
+print("Suggested config changes:")
+print("1. Try model: 'gemini-1.5-flash' (more stable)")
+print("2. Or try: 'gemini-1.5-pro'") 
+print("3. Make sure your API key is valid")
+
+print()
+print("Your current config should use:")
+print('config.model = "gemini-1.5-flash"')
+print('config.provider = "gemini"')
+
+print()
+print("===== Test Complete =====")
+print("The provider should now send properly formatted requests!") 
+]=]
 files["programs/lib/jarvis/llm.lua"] = [[
 -- llm.lua
 -- Handles communication with LLM APIs using a provider abstraction layer.
@@ -1183,6 +1286,59 @@ chat.send = chatbox_queue.send
 chatbox_queue.chat = chat
 
 return chatbox_queue 
+]]
+files["programs/lib/jarvis/debug_api_keys.lua"] = [[
+-- debug_api_keys.lua
+-- Debug script to check API key selection and provider detection
+
+local LLM = require("lib.jarvis.llm")
+
+print("===== API Key Selection Debug =====")
+print()
+
+-- Load main config
+local config_file = loadfile("/etc/jarvis/config.lua")
+if config_file then
+    local config = config_file()
+    print("Main Config (/etc/jarvis/config.lua):")
+    print("  OpenAI key: " .. (config.openai_api_key and (config.openai_api_key:sub(1,8) .. "...") or "NOT SET"))
+    print("  Gemini key: " .. (config.gemini_api_key and (config.gemini_api_key:sub(1,8) .. "...") or "NOT SET"))
+    print("  Model: " .. (config.model or "NOT SET"))
+else
+    print("❌ Could not load main config!")
+end
+
+print()
+
+-- Check LLM config
+print("LLM Config (/etc/jarvis/llm_config.lua):")
+print("  Current provider: " .. LLM.get_current_provider())
+print("  Available providers: " .. table.concat(LLM.get_available_providers(), ", "))
+
+print()
+
+-- Test provider switching
+print("Testing provider switching:")
+
+LLM.set_provider("openai")
+print("  Set to OpenAI - Current: " .. LLM.get_current_provider())
+
+LLM.set_provider("gemini")  
+print("  Set to Gemini - Current: " .. LLM.get_current_provider())
+
+print()
+
+-- Check if the issue is in main.lua's helper function
+print("The issue might be in main.lua's get_api_key_for_provider() function")
+print("Check that it's correctly reading the current provider and selecting the right key")
+
+print()
+print("===== Debug Complete =====")
+print()
+print("Next steps:")
+print("1. Make sure your main config is saved properly")
+print("2. Restart Jarvis to reload configs")
+print("3. If still broken, the helper function in main.lua needs fixing") 
 ]]
 files["programs/lib/jarvis/test_providers.lua"] = [=[
 -- test_providers.lua
@@ -1556,10 +1712,9 @@ local function convert_messages_to_contents(messages)
     
     for _, message in ipairs(messages) do
         if message.role == "system" then
-            -- Gemini doesn't have system messages, prepend to first user message
-            -- We'll handle this by storing system message separately
-            -- For now, convert to user message with clear indication
+            -- System messages become user messages with clear indication
             table.insert(contents, {
+                role = "user",
                 parts = {
                     {
                         text = "System instructions: " .. (message.content or "")
@@ -1568,6 +1723,7 @@ local function convert_messages_to_contents(messages)
             })
         elseif message.role == "user" then
             table.insert(contents, {
+                role = "user",
                 parts = {
                     {
                         text = message.content or ""
@@ -1576,6 +1732,7 @@ local function convert_messages_to_contents(messages)
             })
         elseif message.role == "assistant" then
             table.insert(contents, {
+                role = "model",  -- Gemini uses "model" instead of "assistant"
                 parts = {
                     {
                         text = message.content or ""
@@ -1585,6 +1742,7 @@ local function convert_messages_to_contents(messages)
         elseif message.role == "tool" then
             -- Tool results - add as user message
             table.insert(contents, {
+                role = "user",
                 parts = {
                     {
                         text = "Tool result: " .. (message.content or "No result")
@@ -1632,9 +1790,12 @@ function GeminiProvider:request(api_key, model, messages, tools)
     -- Convert messages to Gemini contents format
     local contents = convert_messages_to_contents(messages)
     
-    -- Build Gemini request body - much simpler than OpenAI
+    -- Build Gemini request body - match Google's format
     local body = {
-        contents = contents
+        contents = contents,
+        generationConfig = {
+            responseMimeType = "text/plain"
+        }
     }
     
     -- Add function calling support if tools are provided
@@ -2179,10 +2340,16 @@ return OpenAIProvider
 local config = {}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
--- Replace YOUR_API_KEY_HERE with your actual API key
-config.openai_api_key = "YOUR_API_KEY_HERE"
+-- Replace YOUR_OPENAI_KEY_HERE with your actual OpenAI API key
+config.openai_api_key = "YOUR_OPENAI_KEY_HERE"
 
--- The model to use. "gpt-4o" is a good default.
+-- Your Gemini API key from https://ai.google.dev/
+-- Replace YOUR_GEMINI_KEY_HERE with your actual Gemini API key  
+config.gemini_api_key = "YOUR_GEMINI_KEY_HERE"
+
+-- The model to use
+-- OpenAI models: "gpt-4o", "gpt-4o-mini", "gpt-4"
+-- Gemini models: "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"
 config.model = "gpt-4o"
 
 return config
@@ -2263,9 +2430,11 @@ return config
 
         print([[
 
-    Installation complete! Build #57 (2025-06-13 07:48:59 UTC)
+    Installation complete! Build #58 (2025-06-13 08:02:01 UTC)
 
-    IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
+    IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
+    - OpenAI API key: https://platform.openai.com/api-keys
+    - Gemini API key: https://ai.google.dev/
 
     Configuration files created:
     - /etc/jarvis/config.lua     (API keys and model settings)
