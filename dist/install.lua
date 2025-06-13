@@ -56,35 +56,40 @@ end
 
 -- Extract response content and metadata from the new API format
 local function extract_response_data(response_data)
-    -- Based on the actual response structure: response.output[0].content[0].text
+    -- Handle the new API format where function calls are in response.output directly
     if response_data.output and type(response_data.output) == "table" and #response_data.output > 0 then
-        local message = response_data.output[1]
-        if message.content and type(message.content) == "table" and #message.content > 0 then
-            local result = {
-                id = message.id,
-                tool_calls = {},
-                content = nil
-            }
-            
-            -- Process all content items
-            for _, content_obj in ipairs(message.content) do
-                if content_obj.type == "output_text" and content_obj.text then
-                    result.content = content_obj.text
-                elseif content_obj.type == "function_call" then
-                    -- Handle tool/function calls in the new format
-                    table.insert(result.tool_calls, {
-                        id = content_obj.id or ("call_" .. os.epoch("utc") .. math.random(1000, 9999)),
-                        type = "function",
-                        ["function"] = {
-                            name = content_obj.name,
-                            arguments = content_obj.parameters and textutils.serializeJSON(content_obj.parameters) or "{}"
-                        }
-                    })
+        local result = {
+            id = nil, -- Function calls don't have a single message ID
+            tool_calls = {},
+            content = nil
+        }
+        
+        -- Process all output items
+        for _, output_item in ipairs(response_data.output) do
+            if output_item.type == "message" then
+                -- This is a text message
+                result.id = output_item.id
+                if output_item.content and type(output_item.content) == "table" and #output_item.content > 0 then
+                    for _, content_obj in ipairs(output_item.content) do
+                        if content_obj.type == "output_text" and content_obj.text then
+                            result.content = content_obj.text
+                        end
+                    end
                 end
+            elseif output_item.type == "function_call" then
+                -- This is a function call in the new format
+                table.insert(result.tool_calls, {
+                    id = output_item.call_id or output_item.id or ("call_" .. os.epoch("utc") .. math.random(1000, 9999)),
+                    type = "function",
+                    ["function"] = {
+                        name = output_item.name,
+                        arguments = output_item.arguments or "{}"
+                    }
+                })
             end
-            
-            return result
         end
+        
+        return result
     end
     
     -- Fallback to standard OpenAI format if available
@@ -254,7 +259,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #46 (2025-06-13 06:19:02 UTC)")
+    debug.info("Build: #47 (2025-06-13 06:25:29 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -286,7 +291,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #46 built on 2025-06-13 06:19:02 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #47 built on 2025-06-13 06:25:29 UTC]" }
             }
             return true
         end
@@ -1395,7 +1400,7 @@ return config
 
         print([[
 
-    Installation complete! Build #46 (2025-06-13 06:19:02 UTC)
+    Installation complete! Build #47 (2025-06-13 06:25:29 UTC)
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
     Reboot the computer to start Jarvis automatically.
     Or, to run Jarvis now, execute: 'programs/jarvis'
