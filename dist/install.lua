@@ -189,7 +189,7 @@ local function main()
             -- Process response using the new format
             local result = process_llm_response(response)
             print("[DEBUG] About to send message to chat: " .. tostring(result))
-            chatBox.sendMessage(result, bot_name, "<>")
+            chatBox.sendMessage(tostring(result), bot_name, "<>")
             print("[DEBUG] Message sent to chat successfully")
             table.insert(messages, { role = "assistant", content = result })
 
