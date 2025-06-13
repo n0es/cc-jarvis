@@ -5,6 +5,7 @@
 local llm = require("lib.jarvis.llm")
 local tools = require("lib.jarvis.tools")
 local chatbox_queue = require("lib.jarvis.chatbox_queue")
+local debug = require("debug")
 
 -- Load config
 local CONFIG_PATH_LUA = "etc.jarvis.config"
@@ -69,15 +70,15 @@ end
 
 local function process_llm_response(response_data)
     -- Try to extract content using the new format
-    print("[DEBUG] Processing LLM response...")
+    debug.debug("Processing LLM response...")
     local content = extract_response_content(response_data)
     if content then
-        print("[DEBUG] Successfully extracted content: " .. content)
+        debug.debug("Successfully extracted content: " .. content)
         return content
     end
     
     -- If we can't extract content, return an error message
-    print("[DEBUG] Failed to extract content from response")
+    debug.error("Failed to extract content from response")
     return "I received a response but couldn't parse it properly."
 end
 
@@ -94,8 +95,8 @@ local function main()
     -- Create a simple chat interface
     local chat = chatbox_queue.chat
 
-    print("Jarvis is online. Waiting for messages.")
-    print("Current bot name: " .. tools.get_bot_name())
+    debug.info("Jarvis is online. Waiting for messages.")
+    debug.info("Current bot name: " .. tools.get_bot_name())
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -121,7 +122,7 @@ local function main()
     local function check_context_timeout()
         local current_time = os.clock() * 20
         if current_time - last_message_time > CONTEXT_TIMEOUT then
-            print("[INFO] Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
+            debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
                 { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -138,20 +139,20 @@ local function main()
         -- Check if listen mode has expired
         if in_listen_mode and current_time > listen_mode_end_time then
             in_listen_mode = false
-            print("[INFO] Listen mode ended")
+            debug.info("Listen mode ended")
         end
         
         -- If bot is mentioned, enter listen mode
         if is_bot_mentioned(message) then
             in_listen_mode = true
             listen_mode_end_time = current_time + LISTEN_MODE_TIMEOUT
-            print("[INFO] Bot mentioned - entering listen mode for " .. LISTEN_MODE_TIMEOUT / 20 / 60 .. " minutes")
+            debug.info("Bot mentioned - entering listen mode for " .. LISTEN_MODE_TIMEOUT / 20 / 60 .. " minutes")
             return true
         end
         
         -- If in listen mode, listen to all messages
         if in_listen_mode then
-            print("[INFO] Listening due to active listen mode")
+            debug.debug("Listening due to active listen mode")
             return true
         end
         
@@ -171,7 +172,7 @@ local function main()
         -- Show queue status if there are messages waiting
         local queue_size = chatbox_queue.getQueueSize()
         if queue_size > 0 then
-            print("[DEBUG] Messages in queue: " .. queue_size)
+            debug.debug("Messages in queue: " .. queue_size)
         end
         
         -- Use timer-based event handling for proper timeout support
@@ -191,7 +192,7 @@ local function main()
 
             -- Check if we should respond to this message
             if should_listen_to_message(message_text) then
-                print(player .. " says: " .. message_text)
+                debug.info(player .. " says: " .. message_text)
                 
                 -- Update last message time
                 last_message_time = current_time
@@ -205,7 +206,7 @@ local function main()
                 
                 -- If LLM is currently processing, cancel it and restart with all pending messages
                 if llm_request_active then
-                    print("[INFO] New message received while processing. Cancelling current request...")
+                    debug.warn("New message received while processing. Cancelling current request...")
                     llm_request_active = false
                     -- Note: We can't actually cancel HTTP requests in ComputerCraft, 
                     -- but we'll ignore the response when it comes back
@@ -225,7 +226,7 @@ local function main()
                     -- Start LLM request
                     llm_request_active = true
                     llm_request_start_time = current_time
-                    print("Thinking...")
+                    debug.info("Thinking...")
                     
                     -- Use parallel.waitForAny to handle the LLM request with timeout
                     local function llm_task()
@@ -265,9 +266,9 @@ local function main()
 
                     -- Process response using the new format
                     local result = process_llm_response(response)
-                    print("[DEBUG] About to send message to chat: " .. tostring(result))
+                    debug.debug("About to send message to chat: " .. tostring(result))
                     chat.send(tostring(result))
-                    print("[DEBUG] Message queued for chat")
+                    debug.debug("Message queued for chat")
                     table.insert(messages, { role = "assistant", content = result })
                 end
             end

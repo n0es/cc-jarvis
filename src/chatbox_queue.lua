@@ -5,6 +5,7 @@ local chatbox_queue = {}
 
 -- Load tools module for bot name management
 local tools = require("lib.jarvis.tools")
+local debug = require("debug")
 
 -- Queue state
 local message_queue = {}
@@ -20,7 +21,7 @@ function chatbox_queue.init(peripheral, delay_seconds)
     end
     message_queue = {}
     last_send_time = 0
-    print("[ChatBox Queue] Initialized with " .. (delay_seconds or 1) .. " second delay")
+    debug.info("ChatBox Queue initialized with " .. (delay_seconds or 1) .. " second delay")
 end
 
 -- Add a message to the queue
@@ -35,7 +36,7 @@ function chatbox_queue.sendMessage(message, sender, target)
         target = target or "<>"
     })
     
-    print("[ChatBox Queue] Message queued: " .. tostring(message))
+    debug.debug("ChatBox Queue message queued: " .. tostring(message))
 end
 
 -- Process the queue - call this regularly in your main loop
@@ -57,10 +58,10 @@ function chatbox_queue.process()
         
         local ok, err = chatbox_peripheral.sendMessage(msg_data.message, msg_data.sender, msg_data.target)
         if ok then
-            print("[ChatBox Queue] Message sent: " .. msg_data.message)
+            debug.info("ChatBox Queue message sent: " .. msg_data.message)
             last_send_time = current_time
         else
-            print("[ChatBox Queue] Failed to send message: " .. tostring(err))
+            debug.error("ChatBox Queue failed to send message: " .. tostring(err))
             -- Re-add message to front of queue to retry
             table.insert(message_queue, 1, msg_data)
         end
@@ -76,7 +77,7 @@ end
 function chatbox_queue.clearQueue()
     local cleared_count = #message_queue
     message_queue = {}
-    print("[ChatBox Queue] Cleared " .. cleared_count .. " messages from queue")
+    debug.warn("ChatBox Queue cleared " .. cleared_count .. " messages from queue")
     return cleared_count
 end
 

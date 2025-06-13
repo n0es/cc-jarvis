@@ -2,6 +2,7 @@
 -- Defines the functions that the LLM can call.
 
 local Tools = {}
+local debug = require("debug")
 
 -- A registry to hold the function definitions and their callable implementations.
 local registry = {}
@@ -71,7 +72,7 @@ function Tools.test_connection()
     
     -- Test 1: General HTTP connectivity
     local test_url = "https://httpbin.org/get"
-    print("Testing HTTP connectivity to " .. test_url)
+    debug.info("Testing HTTP connectivity to " .. test_url)
     
     local success, response = http.get(test_url)
     if success then
@@ -93,7 +94,7 @@ function Tools.test_connection()
     end
     
     -- Test 2: OpenAI domain connectivity
-    print("Testing connectivity to OpenAI domain...")
+    debug.info("Testing connectivity to OpenAI domain...")
     local openai_success, openai_response = http.get("https://api.openai.com/")
     if openai_success then
         local openai_body = openai_response.readAll()
