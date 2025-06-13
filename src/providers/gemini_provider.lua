@@ -110,8 +110,8 @@ local function convert_tools_to_function_declarations(tools)
         if tool_schema.type == "function" and tool_schema.name then
             -- Ensure parameters are correctly formatted for Gemini API
             local parameters = tool_schema.parameters or { type = "object", properties = {} }
-            if not parameters.required or type(parameters.required) ~= "table" then
-                parameters.required = {} -- Ensure 'required' is an array (empty table for JSON array)
+            if parameters.required and #parameters.required == 0 then
+                parameters.required = nil -- Omit 'required' field if it's empty
             end
             
             -- Manually build the FunctionDeclaration to ensure only valid fields are included.
