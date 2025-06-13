@@ -221,6 +221,15 @@ local function process_llm_response(response_data)
                     debug.info("Tool " .. function_name .. " executed successfully")
                     debug.debug("Tool result: " .. result_text)
                     
+                    -- Check if personality was changed and update system prompt
+                    if function_name == "change_personality" then
+                        debug.info("Personality changed, updating system prompt in history...")
+                        if #messages > 0 and messages[1].role == "system" then
+                            messages[1].content = llm.get_system_prompt(tools.get_bot_name())
+                            debug.info("System prompt updated to: " .. llm.get_current_personality())
+                        end
+                    end
+
                     table.insert(tool_results, {
                         tool_call_id = tool_call.id,
                         role = "tool",
@@ -310,7 +319,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #75 (2025-06-13 10:03:41 UTC)")
+    debug.info("Build: #76 (2025-06-13 10:14:08 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -2494,7 +2503,7 @@ return config
 
         print([[
 
-    Installation complete! Build #75 (2025-06-13 10:03:41 UTC)
+    Installation complete! Build #76 (2025-06-13 10:14:08 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
