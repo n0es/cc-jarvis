@@ -68,22 +68,9 @@ local function convert_messages_to_input(messages)
                 })
             end
             
-            -- Add tool calls if present (for assistant messages)
-            if message.role == "assistant" and message.tool_calls then
-                for _, tool_call in ipairs(message.tool_calls) do
-                    local function_args = {}
-                    if tool_call["function"].arguments and tool_call["function"].arguments ~= "{}" then
-                        function_args = textutils.unserializeJSON(tool_call["function"].arguments) or {}
-                    end
-                    
-                    table.insert(converted_message.content, {
-                        type = "function_call",
-                        id = tool_call.id,
-                        name = tool_call["function"].name,
-                        parameters = function_args
-                    })
-                end
-            end
+            -- Note: We don't re-add tool calls to assistant messages in input format
+            -- The API handles tool calls differently in input vs output
+            -- Tool results are added separately as user messages
             
             -- Add id for assistant messages (required by the new format)
             if message.role == "assistant" then
