@@ -4,108 +4,7 @@
     local files = {}
 
     -- Packed files will be inserted here by the build script.
-    files["programs/lib/jarvis/validate_gemini_request.lua"] = [=[
--- validate_gemini_request.lua
--- Validate that our Gemini request format matches Google's specifications
-
-local GeminiProvider = require("lib.jarvis.providers.gemini_provider")
-
-print("===== Gemini Request Format Validation =====")
-print()
-
--- Create test data matching what Jarvis sends
-local test_messages = {
-    {
-        role = "system",
-        content = "You are jarvis, a helpful assistant."
-    },
-    {
-        role = "user",
-        content = "b0op3r: hiii jarvisss"
-    }
-}
-
-local test_tools = {
-    {
-        type = "function",
-        ["function"] = {
-            name = "door_control",
-            description = "Control the base door by sending open or close commands via modem.",
-            parameters = {
-                type = "object",
-                properties = {
-                    action = {
-                        type = "string",
-                        description = "The action to perform: 'open' or 'close'",
-                        enum = {"open", "close"}
-                    }
-                },
-                required = {"action"}
-            }
-        }
-    }
-}
-
-print("Expected Google format (from your example):")
-print([[
-{
-  "contents": [
-    {
-      "role": "user",
-      "parts": [{"text": "b0op3r: hiii jarvisss"}]
-    }
-  ],
-  "systemInstruction": {
-    "role": "user", 
-    "parts": [{"text": "You are jarvis, a helpful assistant."}]
-  },
-  "generationConfig": {
-    "temperature": 1,
-    "topP": 0.95,
-    "topK": 64,
-    "maxOutputTokens": 8192,
-    "responseMimeType": "text/plain"
-  },
-  "tools": [
-    {
-      "functionDeclarations": [
-        {
-          "name": "door_control",
-          "description": "...",
-          "parameters": {...}
-        }
-      ]
-    }
-  ],
-  "toolConfig": {
-    "functionCallingConfig": {
-      "mode": "ANY"
-    }
-  }
-}
-]])
-
-print()
-print("✅ Key fixes applied:")
-print("  • systemInstruction field (separate from contents)")
-print("  • functionDeclarations (not function_declarations)")
-print("  • Complete generationConfig with temperature, topP, etc.")
-print("  • toolConfig with functionCallingConfig")
-print("  • Proper role mapping (model vs assistant)")
-
-print()
-print("🚀 Try again with model: 'gemini-1.5-flash'")
-print("The format should now match Google's specification exactly!")
-
-print()
-print("===== Validation Complete =====")
-print()
-print("If still getting errors:")
-print("1. Double-check your API key is valid")
-print("2. Try model 'gemini-1.5-pro' or 'gemini-1.5-flash'") 
-print("3. Check API quota/billing at ai.google.dev") 
-]=]
-files["programs/jarvis"] = [[
+    files["programs/jarvis"] = [[
 -- Jarvis: Main Program
 -- An LLM-powered assistant for ComputerCraft.
 
@@ -217,6 +116,38 @@ local function extract_response_data(response_data)
                 content = choice.message.content,
                 tool_calls = choice.message.tool_calls or {},
                 id = nil  -- Standard format doesn't have IDs
+            }
+        end
+    end
+    
+    -- Handle Gemini format with candidates
+    if response_data.candidates and #response_data.candidates > 0 then
+        local candidate = response_data.candidates[1]
+        if candidate.content and candidate.content.parts then
+            local content = ""
+            local tool_calls = {}
+            
+            -- Extract text content from parts
+            for _, part in ipairs(candidate.content.parts) do
+                if part.text then
+                    content = content .. part.text
+                elseif part.functionCall then
+                    -- Handle Gemini function calls
+                    table.insert(tool_calls, {
+                        id = "call_" .. os.epoch("utc") .. math.random(1000, 9999),
+                        type = "function",
+                        ["function"] = {
+                            name = part.functionCall.name,
+                            arguments = textutils.serializeJSON(part.functionCall.args or {})
+                        }
+                    })
+                end
+            end
+            
+            return {
+                content = content,
+                tool_calls = tool_calls,
+                id = response_data.responseId
             }
         end
     end
@@ -376,7 +307,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #59 (2025-06-13 08:09:24 UTC)")
+    debug.info("Build: #60 (2025-06-13 08:15:02 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -408,7 +339,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #59 built on 2025-06-13 08:09:24 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #60 built on 2025-06-13 08:15:02 UTC]" }
             }
             return true
         end
@@ -766,115 +697,6 @@ end
 
 return Debug 
 ]]
-files["programs/lib/jarvis/demo_gemini.lua"] = [=[
--- demo_gemini.lua
--- Demo script showing OpenAI vs Gemini provider usage
-
-local LLM = require("lib.jarvis.llm")
-
-print("===== Gemini Provider Demo =====")
-print()
-
--- Show current state
-print("Initial provider: " .. LLM.get_current_provider())
-print("Available providers: " .. table.concat(LLM.get_available_providers(), ", "))
-print()
-
--- Test both providers connectivity
-print("Testing connectivity:")
-
--- Test OpenAI
-LLM.set_provider("openai")
-local success, message = LLM.test_connectivity()
-print("OpenAI: " .. (success and "✓" or "✗") .. " " .. message)
-
--- Test Gemini
-LLM.set_provider("gemini")
-success, message = LLM.test_connectivity()
-print("Gemini: " .. (success and "✓" or "✗") .. " " .. message)
-
-print()
-
--- Example request formats
-print("===== Request Format Comparison =====")
-print()
-print("OpenAI uses complex input format with role conversion")
-print("Gemini uses simple contents format with parts")
-print()
-
--- Example messages
-local example_messages = {
-    {
-        role = "user",
-        content = "Hello! Can you explain the difference between these two AI providers?"
-    }
-}
-
-print("Example request with OpenAI:")
-LLM.set_provider("openai")
-print("Provider: " .. LLM.get_current_provider())
-print("- Uses Bearer token authentication")
-print("- Complex message conversion to input format")
-print("- Advanced reasoning capabilities")
-print()
-
-print("Example request with Gemini:")
-LLM.set_provider("gemini")
-print("Provider: " .. LLM.get_current_provider())
-print("- Uses API key in query parameter")
-print("- Simple contents array format")
-print("- Fast and efficient responses")
-print()
-
--- Uncomment to make actual requests (requires API keys):
---[[
--- Make requests to both providers
-print("===== Live API Comparison =====")
-
--- Load config to get API keys
-local config_file = loadfile("/etc/jarvis/config.lua")
-if config_file then
-    local config = config_file()
-    
-    local example_messages = {
-        {
-            role = "user", 
-            content = "Say hello and tell me which AI you are!"
-        }
-    }
-
-    -- OpenAI request:
-    print("Making request to OpenAI...")
-    LLM.set_provider("openai")
-    local success, response = LLM.request(config.openai_api_key, "gpt-4o", example_messages)
-    if success then
-        print("✓ OpenAI responded!")
-    else
-        print("✗ OpenAI failed: " .. tostring(response))
-    end
-
-    -- Gemini request:
-    print("Making request to Gemini...")
-    LLM.set_provider("gemini")
-    local success, response = LLM.request(config.gemini_api_key, "gemini-1.5-flash", example_messages)
-    if success then
-        print("✓ Gemini responded!")
-    else
-        print("✗ Gemini failed: " .. tostring(response))
-    end
-else
-    print("Could not load config file")
-end
---]]
-
-print("===== Demo Complete =====")
-print()
-print("To switch providers in your code:")
-print('LLM.set_provider("openai")   -- Use OpenAI')
-print('LLM.set_provider("gemini")   -- Use Gemini')
-print()
-print("Or edit /etc/jarvis/llm_config.lua to change the default") 
-]=]
 files["programs/lib/jarvis/tools.lua"] = [[
 -- tools.lua
 -- Defines the functions that the LLM can call.
@@ -1143,71 +965,6 @@ end
 
 return Tools 
 ]]
-files["programs/lib/jarvis/test_gemini_format.lua"] = [=[
--- test_gemini_format.lua
--- Test script to show exact Gemini request format
-
-local LLM = require("lib.jarvis.llm")
-
-print("===== Gemini Request Format Test =====")
-print()
-
--- Switch to Gemini
-LLM.set_provider("gemini")
-
--- Sample messages like Jarvis would send
-local test_messages = {
-    {
-        role = "system",
-        content = "You are jarvis, a helpful assistant."
-    },
-    {
-        role = "user", 
-        content = "b0op3r: hiii jarvisss"
-    }
-}
-
-print("Input messages (OpenAI format):")
-for i, msg in ipairs(test_messages) do
-    print("  " .. i .. ". " .. msg.role .. ": " .. msg.content)
-end
-
-print()
-print("Expected Gemini format (after conversion):")
-print([[
-{
-  "contents": [
-    {
-      "role": "user",
-      "parts": [{"text": "System instructions: You are jarvis, a helpful assistant."}]
-    },
-    {
-      "role": "user", 
-      "parts": [{"text": "b0op3r: hiii jarvisss"}]
-    }
-  ],
-  "generationConfig": {
-    "responseMimeType": "text/plain"
-  },
-  "tools": [...]
-}
-]])
-
-print()
-print("Suggested config changes:")
-print("1. Try model: 'gemini-1.5-flash' (more stable)")
-print("2. Or try: 'gemini-1.5-pro'") 
-print("3. Make sure your API key is valid")
-
-print()
-print("Your current config should use:")
-print('config.model = "gemini-1.5-flash"')
-print('config.provider = "gemini"')
-
-print()
-print("===== Test Complete =====")
-print("The provider should now send properly formatted requests!") 
-]=]
 files["programs/lib/jarvis/llm.lua"] = [[
 -- llm.lua
 -- Handles communication with LLM APIs using a provider abstraction layer.
@@ -2581,7 +2338,7 @@ return config
 
         print([[
 
-    Installation complete! Build #59 (2025-06-13 08:09:24 UTC)
+    Installation complete! Build #60 (2025-06-13 08:15:02 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
