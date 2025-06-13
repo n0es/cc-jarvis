@@ -259,7 +259,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #48 (2025-06-13 06:29:24 UTC)")
+    debug.info("Build: #49 (2025-06-13 06:37:31 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -291,7 +291,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #48 built on 2025-06-13 06:29:24 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #49 built on 2025-06-13 06:37:31 UTC]" }
             }
             return true
         end
@@ -735,12 +735,18 @@ function Tools.door_control(action)
     debug.info("Sending door control command: " .. action)
     debug.debug("Transmitting on channel 25, reply channel " .. bot_channel)
     
-    local success = modem_peripheral.transmit(25, bot_channel, action)
-    if success then
-        return { success = true, message = "Door " .. action .. " command sent successfully" }
-    else
-        return { success = false, message = "Failed to send door command" }
-    end
+    modem_peripheral.transmit(25, bot_channel, action)
+    local success = false
+    local start_time = os.clock()
+    repeat
+        local event, modem_side, sender_channel, reply_channel, message, distance = os.pullEvent("modem_message")
+        if sender_channel == 25 and message == "success" then
+            return { success = true, message = "Door " .. action .. " command sent successfully" }
+        else
+            return { success = false, message = "Failed to send door command" }
+        end
+    until success or os.clock() - start_time > 10
+    return { success = false, message = "Request timed out" }
 end
 
 -- Tool Definition: test_connection
@@ -1387,7 +1393,7 @@ return config
 
         print([[
 
-    Installation complete! Build #48 (2025-06-13 06:29:24 UTC)
+    Installation complete! Build #49 (2025-06-13 06:37:31 UTC)
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
     Reboot the computer to start Jarvis automatically.
     Or, to run Jarvis now, execute: 'programs/jarvis'
