@@ -42,29 +42,63 @@ local function convert_messages_to_input(messages)
     local input = {}
     
     for _, message in ipairs(messages) do
-        local converted_message = {
-            role = message.role,
-            content = {
-                {
-                    type = message.role == "assistant" and "output_text" or "input_text",
-                    text = message.content
+        if message.role == "tool" then
+            -- Tool result messages - add them as input_text
+            local converted_message = {
+                role = "user",  -- Tool results are treated as user input in the new format
+                content = {
+                    {
+                        type = "input_text",
+                        text = "Tool result for " .. (message.tool_call_id or "unknown") .. ": " .. (message.content or "No result")
+                    }
                 }
             }
-        }
-        
-        -- Add id for assistant messages (required by the new format)
-        if message.role == "assistant" then
-            -- Use stored ID if available, otherwise generate a new one
-            if message.id then
-                converted_message.id = message.id
-                debug.debug("Using stored assistant message ID: " .. message.id)
-            else
-                converted_message.id = "msg_" .. tostring(os.epoch("utc")) .. math.random(100000, 999999)
-                debug.debug("Generated new assistant message ID: " .. converted_message.id)
+            table.insert(input, converted_message)
+        else
+            local converted_message = {
+                role = message.role,
+                content = {}
+            }
+            
+            -- Add the main content
+            if message.content and message.content ~= "" then
+                table.insert(converted_message.content, {
+                    type = message.role == "assistant" and "output_text" or "input_text",
+                    text = message.content
+                })
             end
+            
+            -- Add tool calls if present (for assistant messages)
+            if message.role == "assistant" and message.tool_calls then
+                for _, tool_call in ipairs(message.tool_calls) do
+                    local function_args = {}
+                    if tool_call["function"].arguments and tool_call["function"].arguments ~= "{}" then
+                        function_args = textutils.unserializeJSON(tool_call["function"].arguments) or {}
+                    end
+                    
+                    table.insert(converted_message.content, {
+                        type = "function_call",
+                        id = tool_call.id,
+                        name = tool_call["function"].name,
+                        parameters = function_args
+                    })
+                end
+            end
+            
+            -- Add id for assistant messages (required by the new format)
+            if message.role == "assistant" then
+                -- Use stored ID if available, otherwise generate a new one
+                if message.id then
+                    converted_message.id = message.id
+                    debug.debug("Using stored assistant message ID: " .. message.id)
+                else
+                    converted_message.id = "msg_" .. tostring(os.epoch("utc")) .. math.random(100000, 999999)
+                    debug.debug("Generated new assistant message ID: " .. converted_message.id)
+                end
+            end
+            
+            table.insert(input, converted_message)
         end
-        
-        table.insert(input, converted_message)
     end
     
     return input
