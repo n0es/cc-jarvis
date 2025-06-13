@@ -1,7 +1,7 @@
 -- openai_provider.lua
 -- OpenAI API provider implementation
 
-local BaseProvider = require("providers.base_provider")
+local BaseProvider = require("lib.jarvis.providers.base_provider")
 local debug = require("lib.jarvis.debug")
 
 local OpenAIProvider = setmetatable({}, {__index = BaseProvider})

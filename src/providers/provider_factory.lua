@@ -1,7 +1,7 @@
 -- provider_factory.lua
 -- Factory for creating and managing LLM providers
 
-local OpenAIProvider = require("providers.openai_provider")
+local OpenAIProvider = require("lib.jarvis.providers.openai_provider")
 
 local ProviderFactory = {}
 

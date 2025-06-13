@@ -3,8 +3,8 @@
 
 local LLM = {}
 local debug = require("lib.jarvis.debug")
-local LLMConfig = require("config.llm_config")
-local ProviderFactory = require("providers.provider_factory")
+local LLMConfig = require("lib.jarvis.config.llm_config")
+local ProviderFactory = require("lib.jarvis.providers.provider_factory")
 
 -- Test connectivity to the current provider
 function LLM.test_connectivity()

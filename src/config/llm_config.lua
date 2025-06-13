@@ -1,7 +1,8 @@
 -- llm_config.lua
 -- Configuration management for LLM providers
 
-local ProviderFactory = require("providers.provider_factory")
+local ProviderFactory = require("lib.jarvis.providers.provider_factory")
+local debug = require("lib.jarvis.debug")
 
 local LLMConfig = {}
 
