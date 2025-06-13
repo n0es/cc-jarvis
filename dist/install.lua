@@ -259,7 +259,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #55 (2025-06-13 07:21:00 UTC)")
+    debug.info("Build: #56 (2025-06-13 07:26:08 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -291,7 +291,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #55 built on 2025-06-13 07:21:00 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #56 built on 2025-06-13 07:26:08 UTC]" }
             }
             return true
         end
@@ -923,8 +923,8 @@ files["programs/lib/jarvis/llm.lua"] = [[
 
 local LLM = {}
 local debug = require("lib.jarvis.debug")
-local LLMConfig = require("config.llm_config")
-local ProviderFactory = require("providers.provider_factory")
+local LLMConfig = require("lib.jarvis.config.llm_config")
+local ProviderFactory = require("lib.jarvis.providers.provider_factory")
 
 -- Test connectivity to the current provider
 function LLM.test_connectivity()
@@ -1188,7 +1188,8 @@ files["programs/lib/jarvis/config/llm_config.lua"] = [[
 -- llm_config.lua
 -- Configuration management for LLM providers
 
-local ProviderFactory = require("providers.provider_factory")
+local ProviderFactory = require("lib.jarvis.providers.provider_factory")
+local debug = require("lib.jarvis.debug")
 
 local LLMConfig = {}
 
@@ -1350,7 +1351,7 @@ files["programs/lib/jarvis/providers/provider_factory.lua"] = [[
 -- provider_factory.lua
 -- Factory for creating and managing LLM providers
 
-local OpenAIProvider = require("providers.openai_provider")
+local OpenAIProvider = require("lib.jarvis.providers.openai_provider")
 
 local ProviderFactory = {}
 
@@ -1467,7 +1468,7 @@ files["programs/lib/jarvis/providers/openai_provider.lua"] = [[
 -- openai_provider.lua
 -- OpenAI API provider implementation
 
-local BaseProvider = require("providers.base_provider")
+local BaseProvider = require("lib.jarvis.providers.base_provider")
 local debug = require("lib.jarvis.debug")
 
 local OpenAIProvider = setmetatable({}, {__index = BaseProvider})
@@ -1896,7 +1897,7 @@ return config
 
         print([[
 
-    Installation complete! Build #55 (2025-06-13 07:21:00 UTC)
+    Installation complete! Build #56 (2025-06-13 07:26:08 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
 
