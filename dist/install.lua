@@ -259,7 +259,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #56 (2025-06-13 07:26:08 UTC)")
+    debug.info("Build: #57 (2025-06-13 07:48:59 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -291,7 +291,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #56 built on 2025-06-13 07:26:08 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #57 built on 2025-06-13 07:48:59 UTC]" }
             }
             return true
         end
@@ -649,6 +649,93 @@ end
 
 return Debug 
 ]]
+files["programs/lib/jarvis/demo_gemini.lua"] = [=[
+-- demo_gemini.lua
+-- Demo script showing OpenAI vs Gemini provider usage
+
+local LLM = require("lib.jarvis.llm")
+
+print("===== Gemini Provider Demo =====")
+print()
+
+-- Show current state
+print("Initial provider: " .. LLM.get_current_provider())
+print("Available providers: " .. table.concat(LLM.get_available_providers(), ", "))
+print()
+
+-- Test both providers connectivity
+print("Testing connectivity:")
+
+-- Test OpenAI
+LLM.set_provider("openai")
+local success, message = LLM.test_connectivity()
+print("OpenAI: " .. (success and "✓" or "✗") .. " " .. message)
+
+-- Test Gemini
+LLM.set_provider("gemini")
+success, message = LLM.test_connectivity()
+print("Gemini: " .. (success and "✓" or "✗") .. " " .. message)
+
+print()
+
+-- Example request formats
+print("===== Request Format Comparison =====")
+print()
+print("OpenAI uses complex input format with role conversion")
+print("Gemini uses simple contents format with parts")
+print()
+
+-- Example messages
+local example_messages = {
+    {
+        role = "user",
+        content = "Hello! Can you explain the difference between these two AI providers?"
+    }
+}
+
+print("Example request with OpenAI:")
+LLM.set_provider("openai")
+print("Provider: " .. LLM.get_current_provider())
+print("- Uses Bearer token authentication")
+print("- Complex message conversion to input format")
+print("- Advanced reasoning capabilities")
+print()
+
+print("Example request with Gemini:")
+LLM.set_provider("gemini")
+print("Provider: " .. LLM.get_current_provider())
+print("- Uses API key in query parameter")
+print("- Simple contents array format")
+print("- Fast and efficient responses")
+print()
+
+-- Uncomment to make actual requests (requires API keys):
+--[[
+-- Make requests to both providers
+print("===== Live API Comparison =====")
+print("(Uncomment API key sections to test)")
+
+-- You would need to set up API keys:
+-- local openai_key = "your-openai-api-key"
+-- local gemini_key = "your-gemini-api-key"
+
+-- OpenAI request:
+-- LLM.set_provider("openai")
+-- local success, response = LLM.request(openai_key, "gpt-4o", example_messages)
+
+-- Gemini request:
+-- LLM.set_provider("gemini")
+-- local success, response = LLM.request(gemini_key, "gemini-2.0-flash", example_messages)
+--]]
+
+print("===== Demo Complete =====")
+print()
+print("To switch providers in your code:")
+print('LLM.set_provider("openai")   -- Use OpenAI')
+print('LLM.set_provider("gemini")   -- Use Gemini')
+print()
+print("Or edit /etc/jarvis/llm_config.lua to change the default") 
+]=]
 files["programs/lib/jarvis/tools.lua"] = [[
 -- tools.lua
 -- Defines the functions that the LLM can call.
@@ -1133,8 +1220,7 @@ print()
 -- Example of switching providers (when Gemini is added)
 print("Current provider: " .. LLM.get_current_provider())
 
--- Uncomment when Gemini provider is added:
---[[ 
+-- Test switching to Gemini provider
 print("Switching to Gemini provider...")
 local switch_success, switch_message = LLM.set_provider("gemini")
 if switch_success then
@@ -1157,7 +1243,6 @@ print()
 print("Switching back to OpenAI...")
 LLM.set_provider("openai")
 print("Current provider: " .. LLM.get_current_provider())
---]]
 
 print()
 print("===== Provider System Test Complete =====")
@@ -1252,7 +1337,7 @@ function LLMConfig.save_config()
         "-- LLM Configuration for Jarvis",
         "local config = {}",
         "",
-        "-- Default LLM provider (\"openai\" or \"gemini\" when available)",
+        "-- Default LLM provider (\"openai\" or \"gemini\")",
         "config.provider = \"" .. tostring(current_config.provider) .. "\"",
         "",
         "-- Enable debug logging for LLM requests",
@@ -1352,13 +1437,14 @@ files["programs/lib/jarvis/providers/provider_factory.lua"] = [[
 -- Factory for creating and managing LLM providers
 
 local OpenAIProvider = require("lib.jarvis.providers.openai_provider")
+local GeminiProvider = require("lib.jarvis.providers.gemini_provider")
 
 local ProviderFactory = {}
 
 -- Available provider types
 ProviderFactory.PROVIDERS = {
     OPENAI = "openai",
-    -- GEMINI = "gemini",  -- To be added later
+    GEMINI = "gemini",
 }
 
 -- Default provider
@@ -1380,6 +1466,8 @@ function ProviderFactory.create_provider(provider_type)
     
     if provider_type == ProviderFactory.PROVIDERS.OPENAI then
         provider = OpenAIProvider.new()
+    elseif provider_type == ProviderFactory.PROVIDERS.GEMINI then
+        provider = GeminiProvider.new()
     else
         error("Unknown provider type: " .. tostring(provider_type))
     end
@@ -1410,6 +1498,284 @@ function ProviderFactory.is_valid_provider(provider_type)
 end
 
 return ProviderFactory 
+]]
+files["programs/lib/jarvis/providers/gemini_provider.lua"] = [[
+-- gemini_provider.lua
+-- Google Gemini API provider implementation
+
+local BaseProvider = require("lib.jarvis.providers.base_provider")
+local debug = require("lib.jarvis.debug")
+
+local GeminiProvider = setmetatable({}, {__index = BaseProvider})
+GeminiProvider.__index = GeminiProvider
+
+local API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+function GeminiProvider.new()
+    local self = setmetatable(BaseProvider.new(), GeminiProvider)
+    return self
+end
+
+function GeminiProvider:get_name()
+    return "gemini"
+end
+
+-- Test basic connectivity to Gemini API
+function GeminiProvider:test_connectivity()
+    debug.debug("Testing basic connectivity to Gemini API...")
+    
+    local test_headers = {
+        ["User-Agent"] = "ComputerCraft",
+    }
+    
+    debug.debug("Attempting simple connectivity test...")
+    -- Test with a simple models list endpoint (doesn't require API key for basic connectivity)
+    local success, response = http.get("https://generativelanguage.googleapis.com", test_headers)
+    
+    if success then
+        local body = response.readAll()
+        response.close()
+        debug.info("Gemini API is reachable")
+        return true, "Gemini API reachable"
+    else
+        local err_msg = "Cannot reach Gemini API"
+        if response then
+            if type(response) == "string" then
+                err_msg = err_msg .. ": " .. response
+                debug.error("Error: " .. response)
+            end
+        end
+        debug.error(err_msg)
+        return false, err_msg
+    end
+end
+
+-- Convert OpenAI-style messages to Gemini contents format
+local function convert_messages_to_contents(messages)
+    local contents = {}
+    
+    for _, message in ipairs(messages) do
+        if message.role == "system" then
+            -- Gemini doesn't have system messages, prepend to first user message
+            -- We'll handle this by storing system message separately
+            -- For now, convert to user message with clear indication
+            table.insert(contents, {
+                parts = {
+                    {
+                        text = "System instructions: " .. (message.content or "")
+                    }
+                }
+            })
+        elseif message.role == "user" then
+            table.insert(contents, {
+                parts = {
+                    {
+                        text = message.content or ""
+                    }
+                }
+            })
+        elseif message.role == "assistant" then
+            table.insert(contents, {
+                parts = {
+                    {
+                        text = message.content or ""
+                    }
+                }
+            })
+        elseif message.role == "tool" then
+            -- Tool results - add as user message
+            table.insert(contents, {
+                parts = {
+                    {
+                        text = "Tool result: " .. (message.content or "No result")
+                    }
+                }
+            })
+        end
+    end
+    
+    return contents
+end
+
+function GeminiProvider:request(api_key, model, messages, tools)
+    debug.info("Starting Gemini request...")
+    
+    -- Validate parameters
+    local valid, err = self:validate_request(api_key, model, messages)
+    if not valid then
+        return false, err
+    end
+    
+    -- Check if HTTP is enabled
+    if not http then
+        debug.error("HTTP API not available")
+        return false, "HTTP API is not available. Ensure 'http_enable' is set to true in computercraft-common.toml"
+    end
+    debug.debug("HTTP API is available")
+    
+    -- Debug API key (show first/last 4 chars only for security)
+    debug.debug("API key format: " .. debug.mask_api_key(api_key))
+    
+    debug.debug("Model: " .. tostring(model))
+    debug.debug("Messages count: " .. #messages)
+    
+    -- Build Gemini API URL with API key as query parameter
+    local api_url = API_BASE_URL .. "/" .. model .. ":generateContent?key=" .. api_key
+    debug.debug("Target URL: " .. api_url:gsub(api_key, "***"))
+    
+    -- Gemini uses simple headers
+    local headers = {
+        ["Content-Type"] = "application/json"
+    }
+    debug.debug("Headers prepared")
+
+    -- Convert messages to Gemini contents format
+    local contents = convert_messages_to_contents(messages)
+    
+    -- Build Gemini request body - much simpler than OpenAI
+    local body = {
+        contents = contents
+    }
+    
+    -- Add function calling support if tools are provided
+    if tools and #tools > 0 then
+        body.tools = {
+            {
+                function_declarations = tools
+            }
+        }
+        debug.debug("Added " .. #tools .. " function declarations")
+    end
+
+    debug.debug("Serializing request body...")
+    local body_json = textutils.serializeJSON(body)
+    debug.debug("Request body serialized successfully")
+    debug.debug("Request size: " .. #body_json .. " bytes")
+    
+    -- Write comprehensive debug log
+    debug.debug("Writing comprehensive debug log...")
+    local debug_log = {
+        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
+        tick_time = os.clock(),
+        provider = "gemini",
+        request = {
+            url = api_url:gsub(api_key, "***"), -- Mask API key in logs
+            headers = headers,
+            body_raw = body,
+            body_json = body_json,
+            message_count = #messages,
+            messages = messages
+        },
+        response = nil,
+        error = nil,
+        success = false
+    }
+    
+    local function write_debug_log(additional_data)
+        if additional_data then
+            for k, v in pairs(additional_data) do
+                debug_log[k] = v
+            end
+        end
+        debug.write_json_log(debug_log, "Full HTTP request/response debug data")
+    end
+    
+    -- Write initial debug state
+    write_debug_log()
+    
+    -- Also write the formatted JSON request separately for easy copying
+    debug.write_request(body_json)
+    
+    -- Validate JSON before sending
+    if not body_json or body_json == "" then
+        debug.error("Failed to serialize request body to JSON")
+        return false, "Failed to serialize request body to JSON"
+    end
+    
+    -- Show first 200 chars of request for debugging
+    debug.debug("Request preview: " .. debug.preview(body_json))
+    
+    debug.info("Making async HTTP request to Gemini API...")
+    
+    -- Make the request
+    http.request(api_url, body_json, headers)
+    
+    debug.debug("HTTP request sent, waiting for response...")
+    
+    -- Wait for the response using event handling
+    while true do
+        local event, url, handle = os.pullEvent()
+        
+        if event == "http_success" then
+            debug.info("HTTP request successful, reading response...")
+            local response_body = handle.readAll()
+            handle.close()
+            debug.debug("Response received: " .. #response_body .. " bytes")
+            
+            -- Write the response to separate file for easy copying
+            debug.write_response(response_body)
+            
+            -- Show first 200 chars of response for debugging
+            debug.debug("Response preview: " .. debug.preview(response_body))
+            
+            debug.debug("Parsing JSON response...")
+            local response_data = textutils.unserializeJSON(response_body)
+
+            if not response_data then
+                debug.error("Failed to parse JSON response")
+                local error_msg = "Failed to decode JSON response from API: " .. tostring(response_body)
+                write_debug_log({
+                    error = error_msg,
+                    success = false,
+                    response_raw = response_body
+                })
+                return false, error_msg
+            end
+            debug.debug("JSON response parsed successfully")
+            
+            -- Check for API errors
+            if response_data.error then
+                debug.error("Gemini API returned error: " .. tostring(response_data.error.message or response_data.error))
+                local error_msg = "Gemini API Error: " .. tostring(response_data.error.message or response_data.error)
+                write_debug_log({
+                    error = error_msg,
+                    success = false,
+                    response = response_data,
+                    response_raw = response_body
+                })
+                return false, error_msg
+            end
+
+            debug.info("Gemini request completed successfully")
+            write_debug_log({
+                success = true,
+                response = response_data,
+                response_raw = response_body
+            })
+            return true, response_data
+            
+        elseif event == "http_failure" then
+            debug.error("HTTP request failed with http_failure event")
+            local error_msg = "HTTP request failed (http_failure event)"
+            if handle then
+                if type(handle) == "string" then
+                    error_msg = error_msg .. ": " .. handle
+                    debug.error("Error details: " .. handle)
+                end
+            end
+            write_debug_log({
+                error = error_msg,
+                success = false,
+                http_failure_details = handle
+            })
+            return false, error_msg
+        end
+        
+        -- Continue waiting for our specific request response
+    end
+end
+
+return GeminiProvider 
 ]]
 files["programs/lib/jarvis/providers/base_provider.lua"] = [[
 -- base_provider.lua
@@ -1846,7 +2212,7 @@ return config
             local llm_config_content = [[-- LLM Configuration for Jarvis
 local config = {}
 
--- Default LLM provider ("openai" or "gemini" when available)
+-- Default LLM provider ("openai" or "gemini")
 config.provider = "openai"
 
 -- Enable debug logging for LLM requests
@@ -1897,7 +2263,7 @@ return config
 
         print([[
 
-    Installation complete! Build #56 (2025-06-13 07:26:08 UTC)
+    Installation complete! Build #57 (2025-06-13 07:48:59 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
 
