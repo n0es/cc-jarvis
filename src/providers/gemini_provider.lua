@@ -81,11 +81,17 @@ local function convert_messages_to_contents(messages)
                 local parts = {}
                 for _, tool_call in ipairs(message.tool_calls) do
                     if tool_call.function then
-                        local args = textutils.unserializeJSON(tool_call.function.arguments or "{}") or {}
+                        -- Gemini expects the arguments to be a table, not a JSON string.
+                        -- The existing code already unserializes from a string if it's not a table.
+                        local args = tool_call.function.arguments
+                        if type(args) == "string" then
+                            args = textutils.unserializeJSON(args) or {}
+                        end
+
                         table.insert(parts, {
                             functionCall = {
                                 name = tool_call.function.name,
-                                args = args
+                                args = args or {}
                             }
                         })
                     end
@@ -289,9 +295,9 @@ function GeminiProvider:request(api_key, model, messages, tools)
     
     -- Wait for the response using event handling
     while true do
-        local event, url, handle = os.pullEvent()
+        local event, url, handle, reason = os.pullEvent()
         
-        if event == "http_success" then
+        if event == "http_success" and url == api_url then
             debug.info("HTTP request successful, reading response...")
             local response_body = handle.readAll()
             handle.close()
@@ -304,9 +310,9 @@ function GeminiProvider:request(api_key, model, messages, tools)
             debug.debug("Response preview: " .. debug.preview(response_body))
             
             debug.debug("Parsing JSON response...")
-            local response_data = textutils.unserializeJSON(response_body)
+            local success, response_data = pcall(textutils.unserializeJSON, response_body)
 
-            if not response_data then
+            if not success or not response_data then
                 debug.error("Failed to parse JSON response")
                 local error_msg = "Failed to decode JSON response from API: " .. tostring(response_body)
                 write_debug_log({
@@ -320,8 +326,9 @@ function GeminiProvider:request(api_key, model, messages, tools)
             
             -- Check for API errors
             if response_data.error then
-                debug.error("Gemini API returned error: " .. tostring(response_data.error.message or response_data.error))
-                local error_msg = "Gemini API Error: " .. tostring(response_data.error.message or response_data.error)
+                local error_message = response_data.error.message or textutils.serialize(response_data.error)
+                debug.error("Gemini API returned error: " .. error_message)
+                local error_msg = "Gemini API Error: " .. error_message
                 write_debug_log({
                     error = error_msg,
                     success = false,
@@ -331,33 +338,110 @@ function GeminiProvider:request(api_key, model, messages, tools)
                 return false, error_msg
             end
 
+            -- Process successful response
+            local final_response, err = self:process_response(response_data)
+            if not final_response then
+                write_debug_log({
+                    error = err,
+                    success = false,
+                    response = response_data,
+                    response_raw = response_body
+                })
+                return false, err
+            end
+
             debug.info("Gemini request completed successfully")
             write_debug_log({
                 success = true,
                 response = response_data,
                 response_raw = response_body
             })
-            return true, response_data
+            return true, final_response
             
-        elseif event == "http_failure" then
-            debug.error("HTTP request failed with http_failure event")
-            local error_msg = "HTTP request failed (http_failure event)"
-            if handle then
-                if type(handle) == "string" then
-                    error_msg = error_msg .. ": " .. handle
-                    debug.error("Error details: " .. handle)
-                end
-            end
+        elseif event == "http_failure" and url == api_url then
+            local error_msg = "HTTP request failed: " .. tostring(reason)
+            debug.error(error_msg)
+            if handle then handle.close() end
             write_debug_log({
                 error = error_msg,
                 success = false,
-                http_failure_details = handle
+                http_failure_details = reason
             })
             return false, error_msg
         end
-        
-        -- Continue waiting for our specific request response
     end
+end
+
+-- Process the successful response from the Gemini API
+function GeminiProvider:process_response(response_data)
+    if not response_data or not response_data.candidates or #response_data.candidates == 0 then
+        return nil, "Invalid or empty response from Gemini API"
+    end
+
+    local candidate = response_data.candidates[1]
+    local content = candidate.content
+
+    if not content or not content.parts or #content.parts == 0 then
+        return nil, "No content returned from Gemini API"
+    end
+
+    local part = content.parts[1]
+    local response = {
+        id = response_data.responseId or tostring(os.time()),
+        model = response_data.modelVersion or "gemini",
+        choices = {},
+        usage = {
+            prompt_tokens = response_data.usageMetadata.promptTokenCount,
+            completion_tokens = response_data.usageMetadata.candidatesTokenCount,
+            total_tokens = response_data.usageMetadata.totalTokenCount
+        }
+    }
+
+    local message = {
+        role = "assistant",
+        content = nil,
+        tool_calls = nil
+    }
+
+    if part.text then
+        message.content = part.text
+    end
+
+    if part.functionCall then
+        message.tool_calls = {
+            {
+                id = "call_" .. string.gsub(response.id, "[^%w]", ""),
+                type = "function",
+                function = {
+                    name = part.functionCall.name,
+                    arguments = textutils.serializeJSON(part.functionCall.args or {})
+                }
+            }
+        }
+    elseif candidate.finishReason == "TOOL_CODE" and content.parts and #content.parts > 1 then
+        -- Handle multiple parallel function calls
+        message.tool_calls = {}
+        for i, p in ipairs(content.parts) do
+            if p.functionCall then
+                table.insert(message.tool_calls, {
+                    id = "call_" .. string.gsub(response.id, "[^%w]", "") .. "_" .. i,
+                    type = "function",
+                    function = {
+                        name = p.functionCall.name,
+                        arguments = textutils.serializeJSON(p.functionCall.args or {})
+                    }
+                })
+            end
+        end
+    end
+
+    table.insert(response.choices, {
+        index = 1,
+        message = message,
+        finish_reason = candidate.finishReason
+    })
+
+    return response, nil
 end
 
 return GeminiProvider 
