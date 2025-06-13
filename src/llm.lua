@@ -62,6 +62,30 @@ function LLM.get_available_providers()
     return LLMConfig.get_available_providers()
 end
 
+-- Personality management functions
+function LLM.get_current_personality()
+    return LLMConfig.get_personality()
+end
+
+function LLM.set_personality(personality_type)
+    local success, message = LLMConfig.set_personality(personality_type)
+    if success then
+        LLMConfig.save_config()
+        debug.info("Personality switched to: " .. personality_type)
+    else
+        debug.error("Failed to set personality: " .. message)
+    end
+    return success, message
+end
+
+function LLM.get_available_personalities()
+    return LLMConfig.get_available_personalities()
+end
+
+function LLM.get_system_prompt(bot_name)
+    return LLMConfig.get_system_prompt(bot_name)
+end
+
 function LLM.print_config()
     LLMConfig.print_config()
 end

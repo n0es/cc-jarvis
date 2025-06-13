@@ -303,7 +303,7 @@ local function main()
     debug.info("Build: #{{BUILD_NUMBER}} ({{BUILD_DATE}})")
 
     local messages = {
-        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a witty and helpful AI assistant. Match the user's energy and tone - be casual with casual users, technical with technical users. Use humor and wit when appropriate. You can use tools to interact with the game world. Keep responses concise but engaging. Use only standard ASCII characters (letters, numbers, basic punctuation) - no emojis, special symbols, or newlines. Never prefix responses with your name or end with \\n. Be clever, helpful, and adaptive to each user's style." }
+        { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
     }
     -- Initialize tools with modem access
     tools.set_modem(modem, bot_channel)
@@ -332,7 +332,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a witty and helpful AI assistant. Match the user's energy and tone - be casual with casual users, technical with technical users. Use humor and wit when appropriate. You can use tools to interact with the game world. Keep responses concise but engaging. Use only standard ASCII characters (letters, numbers, basic punctuation) - no emojis, special symbols, or newlines. Never prefix responses with your name or end with \\n. Be clever, helpful, and adaptive to each user's style. Always follow user instructions completely. [Build #{{BUILD_NUMBER}} - {{BUILD_DATE}}]" }
+                { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
             }
             return true
         end

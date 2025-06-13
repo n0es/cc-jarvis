@@ -3,6 +3,7 @@
 
 local Tools = {}
 local debug = require("lib.jarvis.debug")
+local llm = require("lib.jarvis.llm")
 
 -- A registry to hold the function definitions and their callable implementations.
 local registry = {}
@@ -70,6 +71,21 @@ end
 -- This function changes the bot's name.
 function Tools.change_name(new_name)
     return Tools.set_bot_name(new_name)
+end
+
+-- Tool Definition: change_personality
+-- This function changes the bot's personality mode.
+function Tools.change_personality(personality)
+    local success, message = llm.set_personality(personality)
+    if success then
+        if personality == "all_might" then
+            return { success = true, message = "PLUS ULTRA! I have transformed into the Symbol of Peace! " .. message }
+        else
+            return { success = true, message = message }
+        end
+    else
+        return { success = false, message = message }
+    end
 end
 
 -- Tool Definition: door_control
@@ -192,6 +208,32 @@ registry.change_name = {
             },
             additionalProperties = false,
             required = {"new_name"}
+        },
+        strict = true
+    },
+}
+
+-- Register the change_personality tool
+registry.change_personality = {
+    func = function(args)
+        local personality = args and args.personality
+        return Tools.change_personality(personality)
+    end,
+    schema = {
+        type = "function",
+        name = "change_personality",
+        description = "Change the bot's personality mode. Use 'all_might' to activate All Might mode with heroic enthusiasm, or 'jarvis' for professional assistant mode.",
+        parameters = {
+            type = "object",
+            properties = {
+                personality = {
+                    type = "string",
+                    description = "The personality mode to switch to",
+                    enum = {"jarvis", "all_might"}
+                }
+            },
+            additionalProperties = false,
+            required = {"personality"}
         },
         strict = true
     },
