@@ -107,7 +107,7 @@ return config
             local llm_config_content = [[-- LLM Configuration for Jarvis
 local config = {{}}
 
--- Default LLM provider ("openai" or "gemini" when available)
+-- Default LLM provider ("openai" or "gemini")
 config.provider = "openai"
 
 -- Enable debug logging for LLM requests

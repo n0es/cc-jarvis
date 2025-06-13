@@ -33,8 +33,7 @@ print()
 -- Example of switching providers (when Gemini is added)
 print("Current provider: " .. LLM.get_current_provider())
 
--- Uncomment when Gemini provider is added:
---[[ 
+-- Test switching to Gemini provider
 print("Switching to Gemini provider...")
 local switch_success, switch_message = LLM.set_provider("gemini")
 if switch_success then
@@ -57,7 +56,6 @@ print()
 print("Switching back to OpenAI...")
 LLM.set_provider("openai")
 print("Current provider: " .. LLM.get_current_provider())
---]]
 
 print()
 print("===== Provider System Test Complete =====")

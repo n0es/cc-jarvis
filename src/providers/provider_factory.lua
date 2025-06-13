@@ -2,13 +2,14 @@
 -- Factory for creating and managing LLM providers
 
 local OpenAIProvider = require("lib.jarvis.providers.openai_provider")
+local GeminiProvider = require("lib.jarvis.providers.gemini_provider")
 
 local ProviderFactory = {}
 
 -- Available provider types
 ProviderFactory.PROVIDERS = {
     OPENAI = "openai",
-    -- GEMINI = "gemini",  -- To be added later
+    GEMINI = "gemini",
 }
 
 -- Default provider
@@ -30,6 +31,8 @@ function ProviderFactory.create_provider(provider_type)
     
     if provider_type == ProviderFactory.PROVIDERS.OPENAI then
         provider = OpenAIProvider.new()
+    elseif provider_type == ProviderFactory.PROVIDERS.GEMINI then
+        provider = GeminiProvider.new()
     else
         error("Unknown provider type: " .. tostring(provider_type))
     end
