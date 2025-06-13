@@ -41,13 +41,19 @@ function LLMConfig.load_config()
         end
     end
     
-    -- Fall back to defaults
+    -- Fall back to defaults and create default config file
     current_config = {}
     for k, v in pairs(default_config) do
         current_config[k] = v
     end
     
-    return false, "Using default configuration"
+    -- Create default configuration file during install/first run
+    local save_success, save_message = LLMConfig.save_config()
+    if save_success then
+        return true, "Default configuration created successfully"
+    else
+        return false, "Using default configuration (could not save: " .. save_message .. ")"
+    end
 end
 
 -- Save configuration to file
@@ -126,6 +132,27 @@ function LLMConfig.print_config()
     end
     print("========================")
     print("Available providers: " .. table.concat(LLMConfig.get_available_providers(), ", "))
+end
+
+-- Install/initialize the configuration system
+function LLMConfig.install()
+    -- Force a fresh load which will create defaults if needed
+    current_config = {}
+    local success, message = LLMConfig.load_config()
+    
+    print("LLM Configuration Install:")
+    print("=========================")
+    if success then
+        print("✓ " .. message)
+        print("✓ Configuration file: " .. CONFIG_FILE)
+    else
+        print("! " .. message)
+    end
+    
+    -- Show the configuration
+    LLMConfig.print_config()
+    
+    return success, message
 end
 
 -- Initialize configuration on load

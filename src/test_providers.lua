@@ -6,6 +6,16 @@ local LLM = require("llm")
 print("===== LLM Provider System Test =====")
 print()
 
+-- Check if configuration exists, install if needed
+if not fs.exists("config/llm_settings.json") then
+    print("Configuration file not found. Running install...")
+    LLM.install()
+    print()
+else
+    print("Configuration file found.")
+    print()
+end
+
 -- Show current configuration
 print("Current Configuration:")
 LLM.print_config()
