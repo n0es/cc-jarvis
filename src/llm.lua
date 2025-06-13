@@ -76,9 +76,4 @@ function LLM.reset_config()
     return LLMConfig.reset_to_defaults()
 end
 
--- Install/initialize the LLM system (creates default config if needed)
-function LLM.install()
-    return LLMConfig.install()
-end
-
 return LLM 

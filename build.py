@@ -95,6 +95,48 @@ return config
             print("Config file already exists at " .. config_path)
         end
         
+        -- Create default LLM config file if it doesn't exist
+        local llm_config_path = "/etc/jarvis/llm_config.lua"
+        if not fs.exists(llm_config_path) then
+            print("Creating default LLM config file at " .. llm_config_path)
+            local config_dir = "/etc/jarvis"
+            if not fs.exists(config_dir) then
+                fs.makeDir(config_dir)
+            end
+            
+            local llm_config_content = [[-- LLM Configuration for Jarvis
+local config = {{}}
+
+-- Default LLM provider ("openai" or "gemini" when available)
+config.provider = "openai"
+
+-- Enable debug logging for LLM requests
+config.debug_enabled = true
+
+-- Request timeout in seconds
+config.timeout = 30
+
+-- Number of retry attempts for failed requests
+config.retry_count = 3
+
+-- Delay between retries in seconds
+config.retry_delay = 1
+
+return config
+]]
+            
+            local llm_config_file = fs.open(llm_config_path, "w")
+            if llm_config_file then
+                llm_config_file.write(llm_config_content)
+                llm_config_file.close()
+                print("Default LLM config created.")
+            else
+                printError("Failed to create LLM config file at " .. llm_config_path)
+            end
+        else
+            print("LLM config file already exists at " .. llm_config_path)
+        end
+        
         local startup_path = "startup.lua"
         local program_to_run = "{program_to_run}"
         
@@ -117,7 +159,13 @@ return config
         print([[
 
     Installation complete! Build #{build_number} ({build_date})
+    
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
+    
+    Configuration files created:
+    - /etc/jarvis/config.lua     (API keys and model settings)
+    - /etc/jarvis/llm_config.lua (LLM provider settings)
+    
     Reboot the computer to start Jarvis automatically.
     Or, to run Jarvis now, execute: '{program_to_run}'
     ]])

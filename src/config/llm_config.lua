@@ -18,55 +18,70 @@ local default_config = {
 local current_config = {}
 
 -- Configuration file path
-local CONFIG_FILE = "config/llm_settings.json"
+local CONFIG_FILE = "/etc/jarvis/llm_config.lua"
+local CONFIG_MODULE = "etc.jarvis.llm_config"
 
 -- Load configuration from file
 function LLMConfig.load_config()
-    -- Try to load from file
-    if fs.exists(CONFIG_FILE) then
-        local file = fs.open(CONFIG_FILE, "r")
-        if file then
-            local content = file.readAll()
-            file.close()
-            
-            local loaded_config = textutils.unserializeJSON(content)
-            if loaded_config then
-                -- Merge with defaults
-                current_config = {}
-                for k, v in pairs(default_config) do
-                    current_config[k] = loaded_config[k] or v
-                end
-                return true, "Configuration loaded successfully"
-            end
+    -- Try to load from file using require
+    local success, loaded_config = pcall(require, CONFIG_MODULE)
+    if success and loaded_config and type(loaded_config) == "table" then
+        -- Merge with defaults
+        current_config = {}
+        for k, v in pairs(default_config) do
+            current_config[k] = loaded_config[k] or v
         end
+        return true, "Configuration loaded successfully"
     end
     
-    -- Fall back to defaults and create default config file
+    -- Fall back to defaults
     current_config = {}
     for k, v in pairs(default_config) do
         current_config[k] = v
     end
     
-    -- Create default configuration file during install/first run
-    local save_success, save_message = LLMConfig.save_config()
-    if save_success then
-        return true, "Default configuration created successfully"
-    else
-        return false, "Using default configuration (could not save: " .. save_message .. ")"
-    end
+    return false, "Using default configuration (config file not found or invalid)"
 end
 
 -- Save configuration to file
 function LLMConfig.save_config()
     -- Ensure config directory exists
-    if not fs.exists("config") then
-        fs.makeDir("config")
+    local config_dir = "/etc/jarvis"
+    if not fs.exists(config_dir) then
+        fs.makeDir(config_dir)
     end
+    
+    -- Generate Lua config content
+    local config_lines = {
+        "-- LLM Configuration for Jarvis",
+        "local config = {}",
+        "",
+        "-- Default LLM provider (\"openai\" or \"gemini\" when available)",
+        "config.provider = \"" .. tostring(current_config.provider) .. "\"",
+        "",
+        "-- Enable debug logging for LLM requests",
+        "config.debug_enabled = " .. tostring(current_config.debug_enabled),
+        "",
+        "-- Request timeout in seconds", 
+        "config.timeout = " .. tostring(current_config.timeout),
+        "",
+        "-- Number of retry attempts for failed requests",
+        "config.retry_count = " .. tostring(current_config.retry_count),
+        "",
+        "-- Delay between retries in seconds",
+        "config.retry_delay = " .. tostring(current_config.retry_delay),
+        "",
+        "return config"
+    }
     
     local file = fs.open(CONFIG_FILE, "w")
     if file then
-        file.write(textutils.serializeJSON(current_config))
+        file.write(table.concat(config_lines, "\n"))
         file.close()
+        
+        -- Clear the require cache so changes take effect immediately
+        package.loaded[CONFIG_MODULE] = nil
+        
         return true, "Configuration saved successfully"
     end
     
@@ -132,27 +147,6 @@ function LLMConfig.print_config()
     end
     print("========================")
     print("Available providers: " .. table.concat(LLMConfig.get_available_providers(), ", "))
-end
-
--- Install/initialize the configuration system
-function LLMConfig.install()
-    -- Force a fresh load which will create defaults if needed
-    current_config = {}
-    local success, message = LLMConfig.load_config()
-    
-    print("LLM Configuration Install:")
-    print("=========================")
-    if success then
-        print("✓ " .. message)
-        print("✓ Configuration file: " .. CONFIG_FILE)
-    else
-        print("! " .. message)
-    end
-    
-    -- Show the configuration
-    LLMConfig.print_config()
-    
-    return success, message
 end
 
 -- Initialize configuration on load
