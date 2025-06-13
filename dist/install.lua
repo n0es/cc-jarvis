@@ -310,7 +310,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #69 (2025-06-13 09:24:38 UTC)")
+    debug.info("Build: #70 (2025-06-13 09:28:24 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -1749,8 +1749,8 @@ local function convert_tools_to_function_declarations(tools)
         if tool_schema.type == "function" and tool_schema.name then
             -- Ensure parameters are correctly formatted for Gemini API
             local parameters = tool_schema.parameters or { type = "object", properties = {} }
-            if not parameters.required or type(parameters.required) ~= "table" then
-                parameters.required = {} -- Ensure 'required' is an array (empty table for JSON array)
+            if parameters.required and #parameters.required == 0 then
+                parameters.required = nil -- Omit 'required' field if it's empty
             end
             
             -- Manually build the FunctionDeclaration to ensure only valid fields are included.
@@ -2462,7 +2462,7 @@ return config
 
         print([[
 
-    Installation complete! Build #69 (2025-06-13 09:24:38 UTC)
+    Installation complete! Build #70 (2025-06-13 09:28:24 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
