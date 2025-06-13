@@ -429,23 +429,26 @@ local function main()
                     chat.send(tostring(result.content))
                     debug.debug("Message queued for chat")
                     
-                    -- Store assistant message with original ID for conversation continuity
-                    local assistant_message = { 
-                        role = "assistant", 
-                        content = result.content 
-                    }
-                    if result.id then
-                        assistant_message.id = result.id
+                    -- Only store assistant message if there's actual content or a valid ID
+                    -- Function-only responses don't need to be stored as assistant messages
+                    if result.content and result.content ~= "" and result.id then
+                        local assistant_message = { 
+                            role = "assistant", 
+                            content = result.content,
+                            id = result.id
+                        }
+                        
+                        -- Add tool calls to the assistant message if present
+                        if result.tool_calls and #result.tool_calls > 0 then
+                            assistant_message.tool_calls = result.tool_calls
+                            debug.debug("Stored " .. #result.tool_calls .. " tool calls with assistant message")
+                        end
+                        
+                        table.insert(messages, assistant_message)
                         debug.debug("Stored assistant message with ID: " .. result.id)
+                    else
+                        debug.debug("Skipping assistant message storage (function-only response or no ID)")
                     end
-                    
-                    -- Add tool calls to the assistant message if present
-                    if result.tool_calls and #result.tool_calls > 0 then
-                        assistant_message.tool_calls = result.tool_calls
-                        debug.debug("Stored " .. #result.tool_calls .. " tool calls with assistant message")
-                    end
-                    
-                    table.insert(messages, assistant_message)
                     
                     -- Add tool results to conversation history if there were tool calls
                     if result.tool_results and #result.tool_results > 0 then

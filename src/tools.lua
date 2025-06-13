@@ -86,18 +86,42 @@ function Tools.door_control(action)
     debug.info("Sending door control command: " .. action)
     debug.debug("Transmitting on channel 25, reply channel " .. bot_channel)
     
+    -- Send the command
     modem_peripheral.transmit(25, bot_channel, action)
-    local success = false
+    
+    -- Wait for response with timeout
     local start_time = os.clock()
-    repeat
-        local event, modem_side, sender_channel, reply_channel, message, distance = os.pullEvent("modem_message")
-        if sender_channel == 25 and message == "success" then
-            return { success = true, message = "Door " .. action .. " command sent successfully" }
-        else
-            return { success = false, message = "Failed to send door command" }
+    local timeout = 5 -- 5 second timeout
+    
+    while os.clock() - start_time < timeout do
+        local event_data = {os.pullEventRaw(timeout - (os.clock() - start_time))}
+        local event = event_data[1]
+        
+        if event == "modem_message" then
+            local modem_side, sender_channel, reply_channel, message, distance = table.unpack(event_data, 2)
+            
+            debug.debug("Received modem message from channel " .. sender_channel .. ": " .. tostring(message))
+            
+            -- Check if this is a response from our door system
+            if sender_channel == 25 and reply_channel == bot_channel then
+                if message == "success" then
+                    debug.info("Door " .. action .. " operation successful")
+                    return { success = true, message = "Door " .. action .. "ed successfully" }
+                elseif message == "failure" or message == "error" then
+                    debug.warn("Door " .. action .. " operation failed")
+                    return { success = false, message = "Door " .. action .. " operation failed" }
+                else
+                    debug.debug("Unexpected door response: " .. tostring(message))
+                end
+            end
+        elseif event == "terminate" then
+            debug.warn("Door control interrupted")
+            return { success = false, message = "Door control interrupted" }
         end
-    until success or os.clock() - start_time > 10
-    return { success = false, message = "Request timed out" }
+    end
+    
+    debug.warn("Door control timed out after " .. timeout .. " seconds")
+    return { success = false, message = "Door control timed out - no response from door system" }
 end
 
 -- Tool Definition: test_connection
