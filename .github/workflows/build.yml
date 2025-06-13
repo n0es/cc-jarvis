@@ -22,12 +22,22 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Generate build number
+        id: build_number
+        run: |
+          BUILD_NUMBER=${{ github.run_number }}
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "Build number: $BUILD_NUMBER"
+
       - name: Run build script
         run: python build.py
+        env:
+          BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
 
       - name: Commit and push changes
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add -f dist/install.lua
-          git diff --staged --quiet || (git commit -m "Automated build of install.lua" && git push)
+          git diff --staged --quiet || (git commit -m "Automated build of install.lua (Build #${{ env.BUILD_NUMBER }})" && git push)

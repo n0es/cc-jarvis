@@ -1,6 +1,7 @@
 import os
 import textwrap
 import re
+import datetime
 
 # --- Configuration ---
 # The directory containing the source Lua files.
@@ -115,7 +116,7 @@ return config
 
         print([[
 
-    Installation complete!
+    Installation complete! Build #{build_number} ({build_date})
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
     Reboot the computer to start Jarvis automatically.
     Or, to run Jarvis now, execute: '{program_to_run}'
@@ -148,6 +149,12 @@ def pack_file_content(content):
 
 def main():
     """Main function to build the installer."""
+    # Get build number from environment or default to 0
+    build_number = os.environ.get('BUILD_NUMBER', '0')
+    build_date = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+    
+    print(f"Building with build number: {build_number}")
+    
     if not os.path.exists(SRC_DIR):
         os.makedirs(SRC_DIR)
         print(f"Created '{SRC_DIR}' directory. Place your Lua source files here.")
@@ -167,6 +174,10 @@ def main():
             try:
                 with open(src_path, 'r', encoding='utf-8') as f:
                     content = f.read()
+                    
+                # Replace build placeholders in the content
+                content = content.replace('{{BUILD_NUMBER}}', build_number)
+                content = content.replace('{{BUILD_DATE}}', build_date)
             except IOError as e:
                 print(f"Could not read file {src_path}: {e}")
                 continue
@@ -193,7 +204,9 @@ def main():
     installer_content = INSTALLER_TEMPLATE.format(
         packed_files='\n'.join(packed_files_lua),
         program_to_run=program_to_run_on_cc,
-        lib_dir=LIB_DIR_ON_CC
+        lib_dir=LIB_DIR_ON_CC,
+        build_number=build_number,
+        build_date=build_date
     )
 
     installer_path = os.path.join(DIST_DIR, INSTALLER_NAME)
