@@ -303,7 +303,7 @@ local function main()
     debug.info("Build: #{{BUILD_NUMBER}} ({{BUILD_DATE}})")
 
     local messages = {
-        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
+        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a witty and helpful AI assistant. Match the user's energy and tone - be casual with casual users, technical with technical users. Use humor and wit when appropriate. You can use tools to interact with the game world. Keep responses concise but engaging. Use only standard ASCII characters (letters, numbers, basic punctuation) - no emojis, special symbols, or newlines. Never prefix responses with your name or end with \\n. Be clever, helpful, and adaptive to each user's style." }
     }
     -- Initialize tools with modem access
     tools.set_modem(modem, bot_channel)
@@ -332,7 +332,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #{{BUILD_NUMBER}} built on {{BUILD_DATE}}]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a witty and helpful AI assistant. Match the user's energy and tone - be casual with casual users, technical with technical users. Use humor and wit when appropriate. You can use tools to interact with the game world. Keep responses concise but engaging. Use only standard ASCII characters (letters, numbers, basic punctuation) - no emojis, special symbols, or newlines. Never prefix responses with your name or end with \\n. Be clever, helpful, and adaptive to each user's style. Always follow user instructions completely. [Build #{{BUILD_NUMBER}} - {{BUILD_DATE}}]" }
             }
             return true
         end
