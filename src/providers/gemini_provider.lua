@@ -305,16 +305,30 @@ function GeminiProvider:request(api_key, model, messages, tools)
             
         elseif event == "http_failure" then
             debug.error("HTTP request failed with http_failure event")
-            local error_msg = "HTTP request failed (http_failure event)"
+            local error_msg = "HTTP request failed"
+            local response_body = ""
+            
             if handle then
-                if type(handle) == "string" then
-                    error_msg = error_msg .. ": " .. handle
-                    debug.error("Error details: " .. handle)
+                -- The handle is a readable object containing the error response body
+                response_body = handle.readAll()
+                handle.close()
+                
+                -- Attempt to parse for a more detailed error message
+                local error_data = textutils.unserializeJSON(response_body)
+                if error_data and error_data.error and error_data.error.message then
+                    error_msg = "Gemini API Error: " .. error_data.error.message
+                    debug.error("Detailed API Error: " .. error_data.error.message)
+                else
+                    -- Fallback to raw response if not parsable JSON with expected structure
+                    error_msg = "HTTP request failed: " .. response_body
+                    debug.error("Error details: " .. response_body)
                 end
             end
+            
             write_debug_log({
                 error = error_msg,
                 success = false,
+                response_raw = response_body,
                 http_failure_details = handle
             })
             return false, error_msg
