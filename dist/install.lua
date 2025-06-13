@@ -310,7 +310,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #73 (2025-06-13 09:48:52 UTC)")
+    debug.info("Build: #74 (2025-06-13 09:55:10 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -1697,8 +1697,8 @@ function GeminiProvider:convert_messages_to_contents(messages)
     for _, message in ipairs(messages) do
         if message.role == "assistant" and message.tool_calls then
             for _, tool_call in ipairs(message.tool_calls) do
-                if tool_call.id and tool_call.function and tool_call.function.name then
-                    tool_call_id_to_name[tool_call.id] = tool_call.function.name
+                if tool_call.id and tool_call["function"] and tool_call["function"].name then
+                    tool_call_id_to_name[tool_call.id] = tool_call["function"].name
                 end
             end
         end
@@ -1719,11 +1719,12 @@ function GeminiProvider:convert_messages_to_contents(messages)
                 -- This is a tool-calling turn from the assistant
                 local parts = {}
                 for _, tool_call in ipairs(message.tool_calls) do
-                    if tool_call.function then
-                        local args = textutils.unserializeJSON(tool_call.function.arguments or "{}") or {}
+                    if tool_call["function"] then
+                        local func = tool_call["function"]
+                        local args = textutils.unserializeJSON(func.arguments or "{}") or {}
                         table.insert(parts, {
                             functionCall = {
-                                name = tool_call.function.name,
+                                name = func.name,
                                 args = args
                             }
                         })
@@ -2493,7 +2494,7 @@ return config
 
         print([[
 
-    Installation complete! Build #73 (2025-06-13 09:48:52 UTC)
+    Installation complete! Build #74 (2025-06-13 09:55:10 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
