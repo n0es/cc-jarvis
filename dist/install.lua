@@ -310,7 +310,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #66 (2025-06-13 09:06:24 UTC)")
+    debug.info("Build: #67 (2025-06-13 09:09:47 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -884,7 +884,6 @@ registry.get_time = {
         parameters = {
             type = "object",
             properties = {},
-            additionalProperties = false,
             required = {}
         },
         strict = true
@@ -909,7 +908,6 @@ registry.change_name = {
                     description = "The new name for the bot"
                 }
             },
-            additionalProperties = false,
             required = {"new_name"}
         },
         strict = true
@@ -935,7 +933,6 @@ registry.change_personality = {
                     enum = {"jarvis", "all_might"}
                 }
             },
-            additionalProperties = false,
             required = {"personality"}
         },
         strict = true
@@ -952,7 +949,6 @@ registry.test_connection = {
         parameters = {
             type = "object",
             properties = {},
-            additionalProperties = false,
             required = {}
         },
         strict = true
@@ -978,7 +974,6 @@ registry.door_control = {
                     enum = {"open", "close"}
                 }
             },
-            additionalProperties = false,
             required = {"action"}
         },
         strict = true
@@ -2462,7 +2457,7 @@ return config
 
         print([[
 
-    Installation complete! Build #66 (2025-06-13 09:06:24 UTC)
+    Installation complete! Build #67 (2025-06-13 09:09:47 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
