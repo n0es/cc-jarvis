@@ -1074,6 +1074,10 @@ function LLM.request(api_key, model, messages, tools)
     body_json = body_json:gsub('"tools":{}', '"tools":[]')
     debug.debug("Fixed tools field to be empty array")
     
+    -- Fix required fields in tool parameters to be arrays instead of objects
+    body_json = body_json:gsub('"required":{}', '"required":[]')
+    debug.debug("Fixed required fields to be empty arrays")
+    
     debug.debug("Request body serialized successfully")
     debug.debug("Request size: " .. #body_json .. " bytes")
     
