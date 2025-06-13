@@ -43,8 +43,24 @@ else
     error(err_msg, 0)
 end
 
-if not config.openai_api_key or config.openai_api_key == "YOUR_API_KEY_HERE" then
-    error("API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
+if not config.openai_api_key or config.openai_api_key == "YOUR_OPENAI_KEY_HERE" then
+    error("OpenAI API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
+end
+
+if not config.gemini_api_key or config.gemini_api_key == "YOUR_GEMINI_KEY_HERE" then
+    error("Gemini API key is not set in " .. CONFIG_PATH_FS .. ". Please add your Gemini API key.", 0)
+end
+
+-- Helper function to get the appropriate API key for the current provider
+local function get_api_key_for_provider()
+    local current_provider = llm.get_current_provider()
+    if current_provider == "openai" then
+        return config.openai_api_key
+    elseif current_provider == "gemini" then
+        return config.gemini_api_key
+    else
+        error("Unknown provider: " .. tostring(current_provider), 0)
+    end
 end
 
 -- Extract response content and metadata from the new API format
@@ -389,7 +405,7 @@ local function main()
                     
                     -- Use parallel.waitForAny to handle the LLM request with timeout
                     local function llm_task()
-                        local ok, response = llm.request(config.openai_api_key, config.model, messages, tool_schemas)
+                        local ok, response = llm.request(get_api_key_for_provider(), config.model, messages, tool_schemas)
                         return ok, response
                     end
                     

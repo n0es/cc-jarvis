@@ -74,10 +74,16 @@ INSTALLER_TEMPLATE = textwrap.dedent("""
 local config = {{}}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
--- Replace YOUR_API_KEY_HERE with your actual API key
-config.openai_api_key = "YOUR_API_KEY_HERE"
+-- Replace YOUR_OPENAI_KEY_HERE with your actual OpenAI API key
+config.openai_api_key = "YOUR_OPENAI_KEY_HERE"
 
--- The model to use. "gpt-4o" is a good default.
+-- Your Gemini API key from https://ai.google.dev/
+-- Replace YOUR_GEMINI_KEY_HERE with your actual Gemini API key  
+config.gemini_api_key = "YOUR_GEMINI_KEY_HERE"
+
+-- The model to use
+-- OpenAI models: "gpt-4o", "gpt-4o-mini", "gpt-4"
+-- Gemini models: "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"
 config.model = "gpt-4o"
 
 return config
@@ -160,7 +166,9 @@ return config
 
     Installation complete! Build #{build_number} ({build_date})
     
-    IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
+    IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
+    - OpenAI API key: https://platform.openai.com/api-keys
+    - Gemini API key: https://ai.google.dev/
     
     Configuration files created:
     - /etc/jarvis/config.lua     (API keys and model settings)

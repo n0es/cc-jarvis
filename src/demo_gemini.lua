@@ -61,19 +61,41 @@ print()
 --[[
 -- Make requests to both providers
 print("===== Live API Comparison =====")
-print("(Uncomment API key sections to test)")
 
--- You would need to set up API keys:
--- local openai_key = "your-openai-api-key"
--- local gemini_key = "your-gemini-api-key"
+-- Load config to get API keys
+local config_file = loadfile("/etc/jarvis/config.lua")
+if config_file then
+    local config = config_file()
+    
+    local example_messages = {
+        {
+            role = "user", 
+            content = "Say hello and tell me which AI you are!"
+        }
+    }
 
--- OpenAI request:
--- LLM.set_provider("openai")
--- local success, response = LLM.request(openai_key, "gpt-4o", example_messages)
+    -- OpenAI request:
+    print("Making request to OpenAI...")
+    LLM.set_provider("openai")
+    local success, response = LLM.request(config.openai_api_key, "gpt-4o", example_messages)
+    if success then
+        print("✓ OpenAI responded!")
+    else
+        print("✗ OpenAI failed: " .. tostring(response))
+    end
 
--- Gemini request:
--- LLM.set_provider("gemini")
--- local success, response = LLM.request(gemini_key, "gemini-2.0-flash", example_messages)
+    -- Gemini request:
+    print("Making request to Gemini...")
+    LLM.set_provider("gemini")
+    local success, response = LLM.request(config.gemini_api_key, "gemini-1.5-flash", example_messages)
+    if success then
+        print("✓ Gemini responded!")
+    else
+        print("✗ Gemini failed: " .. tostring(response))
+    end
+else
+    print("Could not load config file")
+end
 --]]
 
 print("===== Demo Complete =====")

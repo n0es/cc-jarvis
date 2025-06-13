@@ -54,10 +54,9 @@ local function convert_messages_to_contents(messages)
     
     for _, message in ipairs(messages) do
         if message.role == "system" then
-            -- Gemini doesn't have system messages, prepend to first user message
-            -- We'll handle this by storing system message separately
-            -- For now, convert to user message with clear indication
+            -- System messages become user messages with clear indication
             table.insert(contents, {
+                role = "user",
                 parts = {
                     {
                         text = "System instructions: " .. (message.content or "")
@@ -66,6 +65,7 @@ local function convert_messages_to_contents(messages)
             })
         elseif message.role == "user" then
             table.insert(contents, {
+                role = "user",
                 parts = {
                     {
                         text = message.content or ""
@@ -74,6 +74,7 @@ local function convert_messages_to_contents(messages)
             })
         elseif message.role == "assistant" then
             table.insert(contents, {
+                role = "model",  -- Gemini uses "model" instead of "assistant"
                 parts = {
                     {
                         text = message.content or ""
@@ -83,6 +84,7 @@ local function convert_messages_to_contents(messages)
         elseif message.role == "tool" then
             -- Tool results - add as user message
             table.insert(contents, {
+                role = "user",
                 parts = {
                     {
                         text = "Tool result: " .. (message.content or "No result")
@@ -130,9 +132,12 @@ function GeminiProvider:request(api_key, model, messages, tools)
     -- Convert messages to Gemini contents format
     local contents = convert_messages_to_contents(messages)
     
-    -- Build Gemini request body - much simpler than OpenAI
+    -- Build Gemini request body - match Google's format
     local body = {
-        contents = contents
+        contents = contents,
+        generationConfig = {
+            responseMimeType = "text/plain"
+        }
     }
     
     -- Add function calling support if tools are provided
