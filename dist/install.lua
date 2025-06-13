@@ -4,7 +4,108 @@
     local files = {}
 
     -- Packed files will be inserted here by the build script.
-    files["programs/jarvis"] = [[
+    files["programs/lib/jarvis/validate_gemini_request.lua"] = [=[
+-- validate_gemini_request.lua
+-- Validate that our Gemini request format matches Google's specifications
+
+local GeminiProvider = require("lib.jarvis.providers.gemini_provider")
+
+print("===== Gemini Request Format Validation =====")
+print()
+
+-- Create test data matching what Jarvis sends
+local test_messages = {
+    {
+        role = "system",
+        content = "You are jarvis, a helpful assistant."
+    },
+    {
+        role = "user",
+        content = "b0op3r: hiii jarvisss"
+    }
+}
+
+local test_tools = {
+    {
+        type = "function",
+        ["function"] = {
+            name = "door_control",
+            description = "Control the base door by sending open or close commands via modem.",
+            parameters = {
+                type = "object",
+                properties = {
+                    action = {
+                        type = "string",
+                        description = "The action to perform: 'open' or 'close'",
+                        enum = {"open", "close"}
+                    }
+                },
+                required = {"action"}
+            }
+        }
+    }
+}
+
+print("Expected Google format (from your example):")
+print([[
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [{"text": "b0op3r: hiii jarvisss"}]
+    }
+  ],
+  "systemInstruction": {
+    "role": "user", 
+    "parts": [{"text": "You are jarvis, a helpful assistant."}]
+  },
+  "generationConfig": {
+    "temperature": 1,
+    "topP": 0.95,
+    "topK": 64,
+    "maxOutputTokens": 8192,
+    "responseMimeType": "text/plain"
+  },
+  "tools": [
+    {
+      "functionDeclarations": [
+        {
+          "name": "door_control",
+          "description": "...",
+          "parameters": {...}
+        }
+      ]
+    }
+  ],
+  "toolConfig": {
+    "functionCallingConfig": {
+      "mode": "ANY"
+    }
+  }
+}
+]])
+
+print()
+print("✅ Key fixes applied:")
+print("  • systemInstruction field (separate from contents)")
+print("  • functionDeclarations (not function_declarations)")
+print("  • Complete generationConfig with temperature, topP, etc.")
+print("  • toolConfig with functionCallingConfig")
+print("  • Proper role mapping (model vs assistant)")
+
+print()
+print("🚀 Try again with model: 'gemini-1.5-flash'")
+print("The format should now match Google's specification exactly!")
+
+print()
+print("===== Validation Complete =====")
+print()
+print("If still getting errors:")
+print("1. Double-check your API key is valid")
+print("2. Try model 'gemini-1.5-pro' or 'gemini-1.5-flash'") 
+print("3. Check API quota/billing at ai.google.dev") 
+]=]
+files["programs/jarvis"] = [[
 -- Jarvis: Main Program
 -- An LLM-powered assistant for ComputerCraft.
 
@@ -275,7 +376,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #58 (2025-06-13 08:02:01 UTC)")
+    debug.info("Build: #59 (2025-06-13 08:09:24 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -307,7 +408,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #58 built on 2025-06-13 08:02:01 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #59 built on 2025-06-13 08:09:24 UTC]" }
             }
             return true
         end
@@ -1709,18 +1810,19 @@ end
 -- Convert OpenAI-style messages to Gemini contents format
 local function convert_messages_to_contents(messages)
     local contents = {}
+    local system_instruction = nil
     
     for _, message in ipairs(messages) do
         if message.role == "system" then
-            -- System messages become user messages with clear indication
-            table.insert(contents, {
+            -- Extract system instruction separately
+            system_instruction = {
                 role = "user",
                 parts = {
                     {
-                        text = "System instructions: " .. (message.content or "")
+                        text = message.content or ""
                     }
                 }
-            })
+            }
         elseif message.role == "user" then
             table.insert(contents, {
                 role = "user",
@@ -1752,7 +1854,39 @@ local function convert_messages_to_contents(messages)
         end
     end
     
-    return contents
+    return contents, system_instruction
+end
+
+-- Convert OpenAI tools to Gemini function declarations
+local function convert_tools_to_function_declarations(tools)
+    if not tools or #tools == 0 then
+        return nil
+    end
+    
+    local function_declarations = {}
+    
+    for _, tool in ipairs(tools) do
+        if tool.type == "function" and tool["function"] then
+            local func_def = tool["function"]
+            local declaration = {
+                name = func_def.name,
+                description = func_def.description
+            }
+            
+            -- Convert parameters if they exist
+            if func_def.parameters then
+                declaration.parameters = {
+                    type = func_def.parameters.type or "object",
+                    properties = func_def.parameters.properties or {},
+                    required = func_def.parameters.required or {}
+                }
+            end
+            
+            table.insert(function_declarations, declaration)
+        end
+    end
+    
+    return function_declarations
 end
 
 function GeminiProvider:request(api_key, model, messages, tools)
@@ -1788,24 +1922,41 @@ function GeminiProvider:request(api_key, model, messages, tools)
     debug.debug("Headers prepared")
 
     -- Convert messages to Gemini contents format
-    local contents = convert_messages_to_contents(messages)
+    local contents, system_instruction = convert_messages_to_contents(messages)
     
-    -- Build Gemini request body - match Google's format
+    -- Build Gemini request body - match Google's format exactly
     local body = {
         contents = contents,
         generationConfig = {
+            temperature = 1,
+            topP = 0.95,
+            topK = 64,
+            maxOutputTokens = 8192,
             responseMimeType = "text/plain"
         }
     }
     
+    -- Add system instruction if present
+    if system_instruction then
+        body.systemInstruction = system_instruction
+    end
+    
     -- Add function calling support if tools are provided
-    if tools and #tools > 0 then
+    local function_declarations = convert_tools_to_function_declarations(tools)
+    if function_declarations and #function_declarations > 0 then
         body.tools = {
             {
-                function_declarations = tools
+                functionDeclarations = function_declarations
             }
         }
-        debug.debug("Added " .. #tools .. " function declarations")
+        body.toolConfig = {
+            functionCallingConfig = {
+                mode = "ANY"
+            }
+        }
+        debug.debug("Added " .. #function_declarations .. " function declarations")
+    else
+        debug.debug("No tools provided or conversion failed")
     end
 
     debug.debug("Serializing request body...")
@@ -2430,7 +2581,7 @@ return config
 
         print([[
 
-    Installation complete! Build #58 (2025-06-13 08:02:01 UTC)
+    Installation complete! Build #59 (2025-06-13 08:09:24 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
