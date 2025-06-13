@@ -113,6 +113,38 @@ local function extract_response_data(response_data)
         end
     end
     
+    -- Handle Gemini format with candidates
+    if response_data.candidates and #response_data.candidates > 0 then
+        local candidate = response_data.candidates[1]
+        if candidate.content and candidate.content.parts then
+            local content = ""
+            local tool_calls = {}
+            
+            -- Extract text content from parts
+            for _, part in ipairs(candidate.content.parts) do
+                if part.text then
+                    content = content .. part.text
+                elseif part.functionCall then
+                    -- Handle Gemini function calls
+                    table.insert(tool_calls, {
+                        id = "call_" .. os.epoch("utc") .. math.random(1000, 9999),
+                        type = "function",
+                        ["function"] = {
+                            name = part.functionCall.name,
+                            arguments = textutils.serializeJSON(part.functionCall.args or {})
+                        }
+                    })
+                end
+            end
+            
+            return {
+                content = content,
+                tool_calls = tool_calls,
+                id = response_data.responseId
+            }
+        end
+    end
+    
     return nil
 end
 
