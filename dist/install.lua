@@ -310,7 +310,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #63 (2025-06-13 08:47:16 UTC)")
+    debug.info("Build: #64 (2025-06-13 08:53:52 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -1701,7 +1701,6 @@ local function convert_messages_to_contents(messages)
         if message.role == "system" then
             -- Extract system instruction separately
             system_instruction = {
-                role = "user",
                 parts = {
                     {
                         text = message.content or ""
@@ -2455,7 +2454,7 @@ return config
 
         print([[
 
-    Installation complete! Build #63 (2025-06-13 08:47:16 UTC)
+    Installation complete! Build #64 (2025-06-13 08:53:52 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
