@@ -51,15 +51,18 @@ if not config.openai_api_key or config.openai_api_key == "YOUR_API_KEY_HERE" the
     error("API key is not set in " .. CONFIG_PATH_FS .. ". Please add your OpenAI API key.", 0)
 end
 
--- Extract response content from the new API format
-local function extract_response_content(response_data)
+-- Extract response content and metadata from the new API format
+local function extract_response_data(response_data)
     -- Based on the actual response structure: response.output[0].content[0].text
     if response_data.output and type(response_data.output) == "table" and #response_data.output > 0 then
         local message = response_data.output[1]
         if message.content and type(message.content) == "table" and #message.content > 0 then
             local content_obj = message.content[1]
             if content_obj.text then
-                return content_obj.text
+                return {
+                    content = content_obj.text,
+                    id = message.id
+                }
             end
         end
     end
@@ -68,7 +71,10 @@ local function extract_response_content(response_data)
     if response_data.choices and #response_data.choices > 0 then
         local choice = response_data.choices[1]
         if choice.message and choice.message.content then
-            return choice.message.content
+            return {
+                content = choice.message.content,
+                id = nil  -- Standard format doesn't have IDs
+            }
         end
     end
     
@@ -78,15 +84,18 @@ end
 local function process_llm_response(response_data)
     -- Try to extract content using the new format
     debug.debug("Processing LLM response...")
-    local content = extract_response_content(response_data)
-    if content then
-        debug.debug("Successfully extracted content: " .. content)
-        return content
+    local response_info = extract_response_data(response_data)
+    if response_info and response_info.content then
+        debug.debug("Successfully extracted content: " .. response_info.content)
+        return response_info
     end
     
     -- If we can't extract content, return an error message
     debug.error("Failed to extract content from response")
-    return "I received a response but couldn't parse it properly."
+    return {
+        content = "I received a response but couldn't parse it properly.",
+        id = nil
+    }
 end
 
 
@@ -273,10 +282,20 @@ local function main()
 
                     -- Process response using the new format
                     local result = process_llm_response(response)
-                    debug.debug("About to send message to chat: " .. tostring(result))
-                    chat.send(tostring(result))
+                    debug.debug("About to send message to chat: " .. tostring(result.content))
+                    chat.send(tostring(result.content))
                     debug.debug("Message queued for chat")
-                    table.insert(messages, { role = "assistant", content = result })
+                    
+                    -- Store assistant message with original ID for conversation continuity
+                    local assistant_message = { 
+                        role = "assistant", 
+                        content = result.content 
+                    }
+                    if result.id then
+                        assistant_message.id = result.id
+                        debug.debug("Stored assistant message with ID: " .. result.id)
+                    end
+                    table.insert(messages, assistant_message)
                 end
             end
         end
@@ -730,7 +749,14 @@ local function convert_messages_to_input(messages)
         
         -- Add id for assistant messages (required by the new format)
         if message.role == "assistant" then
-            converted_message.id = "msg_" .. tostring(os.epoch("utc")) .. math.random(100000, 999999)
+            -- Use stored ID if available, otherwise generate a new one
+            if message.id then
+                converted_message.id = message.id
+                debug.debug("Using stored assistant message ID: " .. message.id)
+            else
+                converted_message.id = "msg_" .. tostring(os.epoch("utc")) .. math.random(100000, 999999)
+                debug.debug("Generated new assistant message ID: " .. converted_message.id)
+            end
         end
         
         table.insert(input, converted_message)
