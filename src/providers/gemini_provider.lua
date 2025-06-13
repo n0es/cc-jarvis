@@ -103,30 +103,19 @@ local function convert_tools_to_function_declarations(tools)
     if not tools or #tools == 0 then
         return nil
     end
-    
+
     local function_declarations = {}
-    
+
     for _, tool in ipairs(tools) do
         if tool.type == "function" and tool["function"] then
-            local func_def = tool["function"]
-            local declaration = {
-                name = func_def.name,
-                description = func_def.description
-            }
-            
-            -- Convert parameters if they exist
-            if func_def.parameters then
-                declaration.parameters = {
-                    type = func_def.parameters.type or "object",
-                    properties = func_def.parameters.properties or {},
-                    required = func_def.parameters.required or {}
-                }
-            end
-            
-            table.insert(function_declarations, declaration)
+            table.insert(function_declarations, tool["function"])
         end
     end
-    
+
+    if #function_declarations == 0 then
+        return nil
+    end
+
     return function_declarations
 end
 

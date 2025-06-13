@@ -137,6 +137,9 @@ local function extract_response_data(response_data)
                 end
             end
             
+            -- Trim trailing whitespace from the final content
+            content = content:gsub("%s+$", "")
+            
             return {
                 content = content,
                 tool_calls = tool_calls,
