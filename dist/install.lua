@@ -319,7 +319,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #77 (2025-06-13 19:59:57 UTC)")
+    debug.info("Build: #78 (2025-06-13 20:03:07 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -2135,8 +2135,8 @@ function BaseProvider:process_response(response_data)
                     if tool_call.type == "function" then
                         table.insert(results, {
                             type = "tool_call",
-                            tool_name = tool_call.function.name,
-                            tool_args_json = tool_call.function.arguments
+                            tool_name = tool_call["function"].name,
+                            tool_args_json = tool_call["function"].arguments
                         })
                     end
                 end
@@ -2591,7 +2591,7 @@ return config
 
         print([[
 
-    Installation complete! Build #77 (2025-06-13 19:59:57 UTC)
+    Installation complete! Build #78 (2025-06-13 20:03:07 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
