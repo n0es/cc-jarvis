@@ -86,12 +86,18 @@ function Tools.door_control(action)
     debug.info("Sending door control command: " .. action)
     debug.debug("Transmitting on channel 25, reply channel " .. bot_channel)
     
-    local success = modem_peripheral.transmit(25, bot_channel, action)
-    if success then
-        return { success = true, message = "Door " .. action .. " command sent successfully" }
-    else
-        return { success = false, message = "Failed to send door command" }
-    end
+    modem_peripheral.transmit(25, bot_channel, action)
+    local success = false
+    local start_time = os.clock()
+    repeat
+        local event, modem_side, sender_channel, reply_channel, message, distance = os.pullEvent("modem_message")
+        if sender_channel == 25 and message == "success" then
+            return { success = true, message = "Door " .. action .. " command sent successfully" }
+        else
+            return { success = false, message = "Failed to send door command" }
+        end
+    until success or os.clock() - start_time > 10
+    return { success = false, message = "Request timed out" }
 end
 
 -- Tool Definition: test_connection
