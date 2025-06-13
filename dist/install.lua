@@ -307,10 +307,10 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #60 (2025-06-13 08:15:02 UTC)")
+    debug.info("Build: #61 (2025-06-13 08:22:04 UTC)")
 
     local messages = {
-        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
+        { role = "system", content = "You are " .. tools.get_bot_name() .. ", a witty and helpful AI assistant. Match the user's energy and tone - be casual with casual users, technical with technical users. Use humor and wit when appropriate. You can use tools to interact with the game world. Keep responses concise but engaging. Use only standard ASCII characters (letters, numbers, basic punctuation) - no emojis, special symbols, or newlines. Never prefix responses with your name or end with \\n. Be clever, helpful, and adaptive to each user's style." }
     }
     -- Initialize tools with modem access
     tools.set_modem(modem, bot_channel)
@@ -339,7 +339,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #60 built on 2025-06-13 08:15:02 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a witty and helpful AI assistant. Match the user's energy and tone - be casual with casual users, technical with technical users. Use humor and wit when appropriate. You can use tools to interact with the game world. Keep responses concise but engaging. Use only standard ASCII characters (letters, numbers, basic punctuation) - no emojis, special symbols, or newlines. Never prefix responses with your name or end with \\n. Be clever, helpful, and adaptive to each user's style. Always follow user instructions completely. [Build #61 - 2025-06-13 08:22:04 UTC]" }
             }
             return true
         end
@@ -2338,7 +2338,7 @@ return config
 
         print([[
 
-    Installation complete! Build #60 (2025-06-13 08:15:02 UTC)
+    Installation complete! Build #61 (2025-06-13 08:22:04 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
