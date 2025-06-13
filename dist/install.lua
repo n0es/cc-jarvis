@@ -11,6 +11,7 @@
 -- Load modules
 local llm = require("lib.jarvis.llm")
 local tools = require("lib.jarvis.tools")
+local chatbox_queue = require("lib.jarvis.chatbox_queue")
 
 -- Load config
 local CONFIG_PATH_LUA = "etc.jarvis.config"
@@ -94,6 +95,12 @@ local function main()
         error("Could not find a 'chatBox' peripheral. Please place one next to the computer.", 0)
     end
 
+    -- Initialize the chatbox queue with 1 second delay
+    chatbox_queue.init(chatBox, 1)
+    
+    -- Create a simple chat interface
+    local chat = chatbox_queue.chat
+
     print("Jarvis is online. Waiting for messages.")
     print("Current bot name: " .. tools.get_bot_name())
 
@@ -159,15 +166,28 @@ local function main()
     end
 
     while true do
-        local _, player, message_text = os.pullEvent("chat")
-        local bot_name = tools.get_bot_name()
-        local current_time = os.clock() * 20
+        -- Process the chatbox queue
+        chatbox_queue.process()
+        
+        -- Show queue status if there are messages waiting
+        local queue_size = chatbox_queue.getQueueSize()
+        if queue_size > 0 then
+            print("[DEBUG] Messages in queue: " .. queue_size)
+        end
+        
+        -- Use pullEventRaw with timeout to allow queue processing
+        local event_data = {os.pullEventRaw(0.1)}  -- 0.1 second timeout
+        
+        if event_data[1] == "chat" then
+            local _, player, message_text = table.unpack(event_data)
+            local bot_name = tools.get_bot_name()
+            local current_time = os.clock() * 20
 
-        -- Check for context timeout before processing message
-        check_context_timeout()
+            -- Check for context timeout before processing message
+            check_context_timeout()
 
-        -- Check if we should respond to this message
-        if should_listen_to_message(message_text) then
+            -- Check if we should respond to this message
+            if should_listen_to_message(message_text) then
             print(player .. " says: " .. message_text)
             
             -- Update last message time
@@ -176,12 +196,12 @@ local function main()
             table.insert(messages, { role = "user", content = message_text })
 
             -- Call the LLM (without tools for now)
-            chatBox.sendMessage("Thinking...", bot_name, "<>")
+            print("Thinking...")
             local ok, response = llm.request(config.openai_api_key, config.model, messages) -- removed tool_schemas parameter
 
             if not ok then
                 printError("LLM Request Failed: " .. tostring(response))
-                chatBox.sendMessage("Sorry, I encountered an error.", bot_name, "<>")
+                chat.send("Sorry, I encountered an error.")
                 table.remove(messages) -- Remove the failed user message
                 goto continue
             end
@@ -189,13 +209,9 @@ local function main()
             -- Process response using the new format
             local result = process_llm_response(response)
             print("[DEBUG] About to send message to chat: " .. tostring(result))
-            local ok, err = chatBox.sendMessage(tostring(result), bot_name, "<>")
-            if not ok then
-                print("[DEBUG] Error sending message to chat: " .. tostring(err))
-            else
-                print("[DEBUG] Message sent to chat successfully")
-                table.insert(messages, { role = "assistant", content = result })
-            end
+            chat.send(tostring(result))
+            print("[DEBUG] Message queued for chat")
+            table.insert(messages, { role = "assistant", content = result })
 
             --[[
             -- Comment out tool handling for now
@@ -224,7 +240,8 @@ local function main()
             end
             --]]
 
-            ::continue::
+                ::continue::
+            end
         end
     end
 end
@@ -710,6 +727,104 @@ function LLM.request(api_key, model, messages, tools)
 end
 
 return LLM 
+]]
+files["programs/lib/jarvis/lib/jarvis/chatbox_queue.lua"] = [[
+-- ChatBox Queue Module
+-- Manages message sending with a queue to prevent rapid message issues
+
+local chatbox_queue = {}
+
+-- Load tools module for bot name management
+local tools = require("lib.jarvis.tools")
+
+-- Queue state
+local message_queue = {}
+local last_send_time = 0
+local min_delay_ticks = 20  -- 1 second (20 ticks per second)
+local chatbox_peripheral = nil
+
+-- Initialize the queue with a chatbox peripheral and optional delay
+function chatbox_queue.init(peripheral, delay_seconds)
+    chatbox_peripheral = peripheral
+    if delay_seconds then
+        min_delay_ticks = delay_seconds * 20  -- Convert seconds to ticks
+    end
+    message_queue = {}
+    last_send_time = 0
+    print("[ChatBox Queue] Initialized with " .. (delay_seconds or 1) .. " second delay")
+end
+
+-- Add a message to the queue
+function chatbox_queue.sendMessage(message, sender, target)
+    if not chatbox_peripheral then
+        error("ChatBox queue not initialized. Call chatbox_queue.init() first.", 2)
+    end
+    
+    table.insert(message_queue, {
+        message = message,
+        sender = sender or "Computer",
+        target = target or "<>"
+    })
+    
+    print("[ChatBox Queue] Message queued: " .. tostring(message))
+end
+
+-- Process the queue - call this regularly in your main loop
+function chatbox_queue.process()
+    if not chatbox_peripheral then
+        return
+    end
+    
+    -- Check if we have messages to send
+    if #message_queue == 0 then
+        return
+    end
+    
+    local current_time = os.clock() * 20  -- Convert to ticks
+    
+    -- Check if enough time has passed since last send
+    if current_time - last_send_time >= min_delay_ticks then
+        local msg_data = table.remove(message_queue, 1)  -- Remove first message from queue
+        
+        local ok, err = chatbox_peripheral.sendMessage(msg_data.message, msg_data.sender, msg_data.target)
+        if ok then
+            print("[ChatBox Queue] Message sent: " .. msg_data.message)
+            last_send_time = current_time
+        else
+            print("[ChatBox Queue] Failed to send message: " .. tostring(err))
+            -- Re-add message to front of queue to retry
+            table.insert(message_queue, 1, msg_data)
+        end
+    end
+end
+
+-- Get queue status
+function chatbox_queue.getQueueSize()
+    return #message_queue
+end
+
+-- Clear the queue (useful for emergencies)
+function chatbox_queue.clearQueue()
+    local cleared_count = #message_queue
+    message_queue = {}
+    print("[ChatBox Queue] Cleared " .. cleared_count .. " messages from queue")
+    return cleared_count
+end
+
+-- Simple interface for sending public messages
+function chatbox_queue.send(message)
+    local bot_name = tools.get_bot_name()
+    return chatbox_queue.sendMessage(message, bot_name, "<>")
+end
+
+-- Create a chat interface object for even simpler usage
+local chat = {}
+chat.send = chatbox_queue.send
+
+-- Export both the full interface and the simple chat interface
+chatbox_queue.chat = chat
+
+return chatbox_queue 
 ]]
 
     local function install()
