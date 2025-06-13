@@ -181,7 +181,6 @@ registry.get_time = {
         parameters = {
             type = "object",
             properties = {},
-            additionalProperties = false,
             required = {}
         },
         strict = true
@@ -206,7 +205,6 @@ registry.change_name = {
                     description = "The new name for the bot"
                 }
             },
-            additionalProperties = false,
             required = {"new_name"}
         },
         strict = true
@@ -232,7 +230,6 @@ registry.change_personality = {
                     enum = {"jarvis", "all_might"}
                 }
             },
-            additionalProperties = false,
             required = {"personality"}
         },
         strict = true
@@ -249,7 +246,6 @@ registry.test_connection = {
         parameters = {
             type = "object",
             properties = {},
-            additionalProperties = false,
             required = {}
         },
         strict = true
@@ -275,7 +271,6 @@ registry.door_control = {
                     enum = {"open", "close"}
                 }
             },
-            additionalProperties = false,
             required = {"action"}
         },
         strict = true
