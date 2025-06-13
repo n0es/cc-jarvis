@@ -144,6 +144,9 @@ local function extract_response_data(response_data)
                 end
             end
             
+            -- Trim trailing whitespace from the final content
+            content = content:gsub("%s+$", "")
+            
             return {
                 content = content,
                 tool_calls = tool_calls,
@@ -307,7 +310,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #62 (2025-06-13 08:37:59 UTC)")
+    debug.info("Build: #63 (2025-06-13 08:47:16 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -1744,30 +1747,19 @@ local function convert_tools_to_function_declarations(tools)
     if not tools or #tools == 0 then
         return nil
     end
-    
+
     local function_declarations = {}
-    
+
     for _, tool in ipairs(tools) do
         if tool.type == "function" and tool["function"] then
-            local func_def = tool["function"]
-            local declaration = {
-                name = func_def.name,
-                description = func_def.description
-            }
-            
-            -- Convert parameters if they exist
-            if func_def.parameters then
-                declaration.parameters = {
-                    type = func_def.parameters.type or "object",
-                    properties = func_def.parameters.properties or {},
-                    required = func_def.parameters.required or {}
-                }
-            end
-            
-            table.insert(function_declarations, declaration)
+            table.insert(function_declarations, tool["function"])
         end
     end
-    
+
+    if #function_declarations == 0 then
+        return nil
+    end
+
     return function_declarations
 end
 
@@ -2463,7 +2455,7 @@ return config
 
         print([[
 
-    Installation complete! Build #62 (2025-06-13 08:37:59 UTC)
+    Installation complete! Build #63 (2025-06-13 08:47:16 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
