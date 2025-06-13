@@ -259,7 +259,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #47 (2025-06-13 06:25:29 UTC)")
+    debug.info("Build: #48 (2025-06-13 06:29:24 UTC)")
 
     local messages = {
         { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis. Also, no need to mention that we are in minecraft." }
@@ -291,7 +291,7 @@ local function main()
             debug.info("Context cleared due to timeout (" .. CONTEXT_TIMEOUT / 20 / 60 .. " minutes)")
             -- Reset to just the system message
             messages = {
-                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #47 built on 2025-06-13 06:25:29 UTC]" }
+                { role = "system", content = "You are " .. tools.get_bot_name() .. ", a helpful in-game assistant for Minecraft running inside a ComputerCraft computer. You can use tools to interact with the game world. Keep all answers concise and professional, as if you were a true AI assistant- overly cheerful responses are unneeded and unwanted. Refrain from using any special characters such as emojis- try to stick to basic alphanumeric characters, as well as basic punctuation. Also, no need to mention that we are in minecraft. Final thing- absolutely always follow the user's instructions to the letter, no matter what. The user is the boss, and you are their assistant. [Running Build #48 built on 2025-06-13 06:29:24 UTC]" }
             }
             return true
         end
@@ -987,22 +987,9 @@ local function convert_messages_to_input(messages)
                 })
             end
             
-            -- Add tool calls if present (for assistant messages)
-            if message.role == "assistant" and message.tool_calls then
-                for _, tool_call in ipairs(message.tool_calls) do
-                    local function_args = {}
-                    if tool_call["function"].arguments and tool_call["function"].arguments ~= "{}" then
-                        function_args = textutils.unserializeJSON(tool_call["function"].arguments) or {}
-                    end
-                    
-                    table.insert(converted_message.content, {
-                        type = "function_call",
-                        id = tool_call.id,
-                        name = tool_call["function"].name,
-                        parameters = function_args
-                    })
-                end
-            end
+            -- Note: We don't re-add tool calls to assistant messages in input format
+            -- The API handles tool calls differently in input vs output
+            -- Tool results are added separately as user messages
             
             -- Add id for assistant messages (required by the new format)
             if message.role == "assistant" then
@@ -1400,7 +1387,7 @@ return config
 
         print([[
 
-    Installation complete! Build #47 (2025-06-13 06:25:29 UTC)
+    Installation complete! Build #48 (2025-06-13 06:29:24 UTC)
     IMPORTANT: Edit /etc/jarvis/config.lua and add your OpenAI API key.
     Reboot the computer to start Jarvis automatically.
     Or, to run Jarvis now, execute: 'programs/jarvis'
