@@ -310,7 +310,7 @@ local function main()
 
     debug.info("Jarvis is online. Waiting for messages.")
     debug.info("Current bot name: " .. tools.get_bot_name())
-    debug.info("Build: #64 (2025-06-13 08:53:52 UTC)")
+    debug.info("Build: #65 (2025-06-13 09:00:46 UTC)")
 
     local messages = {
         { role = "system", content = llm.get_system_prompt(tools.get_bot_name()) }
@@ -1749,9 +1749,12 @@ local function convert_tools_to_function_declarations(tools)
 
     local function_declarations = {}
 
-    for _, tool in ipairs(tools) do
-        if tool.type == "function" and tool["function"] then
-            table.insert(function_declarations, tool["function"])
+    for _, tool_schema in ipairs(tools) do
+        -- The schema from tools.lua is already in the format Gemini expects for a function declaration.
+        if tool_schema.type == "function" and tool_schema.name then
+            -- We can directly use the schema. Gemini calls this a "FunctionDeclaration".
+            -- The structure from tools.lua matches what Gemini needs.
+            table.insert(function_declarations, tool_schema)
         end
     end
 
@@ -2454,7 +2457,7 @@ return config
 
         print([[
 
-    Installation complete! Build #64 (2025-06-13 08:53:52 UTC)
+    Installation complete! Build #65 (2025-06-13 09:00:46 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
