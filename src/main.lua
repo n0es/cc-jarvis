@@ -4,6 +4,7 @@
 -- Load modules
 local llm = require("lib.jarvis.llm")
 local tools = require("lib.jarvis.tools")
+local chatbox_queue = require("lib.jarvis.chatbox_queue")
 
 -- Load config
 local CONFIG_PATH_LUA = "etc.jarvis.config"
@@ -87,6 +88,12 @@ local function main()
         error("Could not find a 'chatBox' peripheral. Please place one next to the computer.", 0)
     end
 
+    -- Initialize the chatbox queue with 1 second delay
+    chatbox_queue.init(chatBox, 1)
+    
+    -- Create a simple chat interface
+    local chat = chatbox_queue.chat
+
     print("Jarvis is online. Waiting for messages.")
     print("Current bot name: " .. tools.get_bot_name())
 
@@ -152,15 +159,28 @@ local function main()
     end
 
     while true do
-        local _, player, message_text = os.pullEvent("chat")
-        local bot_name = tools.get_bot_name()
-        local current_time = os.clock() * 20
+        -- Process the chatbox queue
+        chatbox_queue.process()
+        
+        -- Show queue status if there are messages waiting
+        local queue_size = chatbox_queue.getQueueSize()
+        if queue_size > 0 then
+            print("[DEBUG] Messages in queue: " .. queue_size)
+        end
+        
+        -- Use pullEventRaw with timeout to allow queue processing
+        local event_data = {os.pullEventRaw(0.1)}  -- 0.1 second timeout
+        
+        if event_data[1] == "chat" then
+            local _, player, message_text = table.unpack(event_data)
+            local bot_name = tools.get_bot_name()
+            local current_time = os.clock() * 20
 
-        -- Check for context timeout before processing message
-        check_context_timeout()
+            -- Check for context timeout before processing message
+            check_context_timeout()
 
-        -- Check if we should respond to this message
-        if should_listen_to_message(message_text) then
+            -- Check if we should respond to this message
+            if should_listen_to_message(message_text) then
             print(player .. " says: " .. message_text)
             
             -- Update last message time
@@ -169,12 +189,12 @@ local function main()
             table.insert(messages, { role = "user", content = message_text })
 
             -- Call the LLM (without tools for now)
-            chatBox.sendMessage("Thinking...", bot_name, "<>")
+            print("Thinking...")
             local ok, response = llm.request(config.openai_api_key, config.model, messages) -- removed tool_schemas parameter
 
             if not ok then
                 printError("LLM Request Failed: " .. tostring(response))
-                chatBox.sendMessage("Sorry, I encountered an error.", bot_name, "<>")
+                chat.send("Sorry, I encountered an error.")
                 table.remove(messages) -- Remove the failed user message
                 goto continue
             end
@@ -182,13 +202,9 @@ local function main()
             -- Process response using the new format
             local result = process_llm_response(response)
             print("[DEBUG] About to send message to chat: " .. tostring(result))
-            local ok, err = chatBox.sendMessage(tostring(result), bot_name, "<>")
-            if not ok then
-                print("[DEBUG] Error sending message to chat: " .. tostring(err))
-            else
-                print("[DEBUG] Message sent to chat successfully")
-                table.insert(messages, { role = "assistant", content = result })
-            end
+            chat.send(tostring(result))
+            print("[DEBUG] Message queued for chat")
+            table.insert(messages, { role = "assistant", content = result })
 
             --[[
             -- Comment out tool handling for now
@@ -217,7 +233,8 @@ local function main()
             end
             --]]
 
-            ::continue::
+                ::continue::
+            end
         end
     end
 end
