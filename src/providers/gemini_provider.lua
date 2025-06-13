@@ -203,7 +203,7 @@ function GeminiProvider:request(api_key, model, messages, tools)
     local body = {
         contents = contents,
         generationConfig = {
-            temperature = 1,
+            temperature = 0.2,
             topP = 0.95,
             topK = 64,
             maxOutputTokens = 8192
@@ -225,7 +225,7 @@ function GeminiProvider:request(api_key, model, messages, tools)
         }
         body.toolConfig = {
             functionCallingConfig = {
-                mode = "ANY"
+                mode = "AUTO" -- AUTO lets the model decide, ANY forces a tool call
             }
         }
         debug.debug("Added " .. #function_declarations .. " function declarations")
