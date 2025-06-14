@@ -67,6 +67,13 @@ function Tools.set_modem(modem, channel)
     debug.debug("Tools modem set to channel " .. bot_channel)
 end
 
+-- Tool Definition: get_time
+-- This function gets the current in-game time.
+function Tools.get_time()
+    local time = textutils.formatTime(os.time(), false)
+    return { success = true, time = time, message = "Current time is " .. time }
+end
+
 -- Tool Definition: change_name
 -- This function changes the bot's name.
 function Tools.change_name(new_name)
@@ -276,12 +283,6 @@ registry.door_control = {
         strict = true
     },
 }
-
--- Tool Definition: get_time
--- This function gets the current in-game time.
-function Tools.get_time()
-    return { time = textutils.formatTime(os.time("ingame"), false) }
-end
 
 -- Function to get all tool schemas to send to the LLM.
 function Tools.get_all_schemas()

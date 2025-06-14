@@ -190,7 +190,6 @@ local function initialize()
         debug.warn("Modem not found. Door control and other modem-based tools will be unavailable.")
     end
     tools.set_modem(modem, modem_channel)
-    tools.init() -- Initialize all available tools
 
     -- Initialize chatbox queue
     chatbox_queue.init(config.chat_delay or 1)
