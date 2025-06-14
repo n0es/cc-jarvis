@@ -150,7 +150,7 @@ local function handle_chat_message(username, message_text)
         return
     end
 
-    local success, response_data = llm.request(api_key, config.model, messages, tools.get_tools())
+    local success, response_data = llm.request(api_key, config.model, messages, tools.get_all_schemas())
     
     if success then
         process_llm_response(response_data, messages)
