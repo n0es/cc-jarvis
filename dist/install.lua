@@ -59,7 +59,7 @@ local function process_llm_response(response_parts, messages_history)
     debug.debug("Processing LLM response with " .. #response_parts .. " parts...")
     if #response_parts == 0 then
         debug.error("LLM response was empty.")
-        chatbox_queue.add_message("I'm sorry, I seem to be having trouble thinking straight right now.")
+        chatbox_queue.sendMessage("I'm sorry, I seem to be having trouble thinking straight right now.")
         return
     end
 
@@ -69,7 +69,7 @@ local function process_llm_response(response_parts, messages_history)
     for _, part in ipairs(response_parts) do
         if part.type == "message" then
             debug.info("LLM response part: message")
-            chatbox_queue.add_message(part.content)
+            chatbox_queue.sendMessage(part.content)
             table.insert(assistant_message_content, part.content)
 
         elseif part.type == "tool_call" then
@@ -104,12 +104,12 @@ local function process_llm_response(response_parts, messages_history)
                     result_text = type(result) == "table" and textutils.serializeJSON(result) or tostring(result)
                     debug.info("Tool " .. part.tool_name .. " executed successfully. Result: " .. result_text)
                     if type(result) == "table" and result.message then
-                        chatbox_queue.add_message(result.message)
+                        chatbox_queue.sendMessage(result.message)
                     end
                 else
                     result_text = "Tool execution failed: " .. tostring(result)
                     debug.error(result_text)
-                    chatbox_queue.add_message(result_text)
+                    chatbox_queue.sendMessage(result_text)
                 end
                 table.insert(messages_history, {
                     tool_call_id = tool_call_id,
@@ -153,7 +153,7 @@ local function handle_chat_message(username, message_text)
     debug.info("Thinking...")
     local api_key = get_api_key_for_provider()
     if not api_key then
-        chatbox_queue.add_message("API key for the current provider is not configured.")
+        chatbox_queue.sendMessage("API key for the current provider is not configured.")
         return
     end
 
@@ -166,7 +166,7 @@ local function handle_chat_message(username, message_text)
         if type(response_data) == "string" then
             error_message = response_data
         end
-        chatbox_queue.add_message(error_message)
+        chatbox_queue.sendMessage(error_message)
         debug.error("LLM request failed: " .. error_message)
     end
 
@@ -198,15 +198,12 @@ local function initialize()
     end
     tools.set_modem(modem, modem_channel)
 
-    -- Initialize chatbox queue
-    chatbox_queue.init(config.chat_delay or 1)
-    debug.info("ChatBox Queue initialized with " .. (config.chat_delay or 1) .. " second delay")
-    
-    -- Find chatbox peripheral
+    -- Initialize chatbox queue and find peripheral
     chatBox = peripheral.find("chatBox")
     if not chatBox then
         error("ChatBox peripheral not found. Please attach a chat box.", 0)
     end
+    chatbox_queue.init(chatBox, config.chat_delay or 1)
 
     -- Initialize message history with system prompt
     messages = {
@@ -2313,7 +2310,7 @@ return config
 
         print([[
 
-    Installation complete! Build #83 (2025-06-14 04:53:45 UTC)
+    Installation complete! Build #84 (2025-06-14 04:57:10 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
