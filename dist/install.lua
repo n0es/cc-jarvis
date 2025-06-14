@@ -197,7 +197,6 @@ local function initialize()
         debug.warn("Modem not found. Door control and other modem-based tools will be unavailable.")
     end
     tools.set_modem(modem, modem_channel)
-    tools.init() -- Initialize all available tools
 
     -- Initialize chatbox queue
     chatbox_queue.init(config.chat_delay or 1)
@@ -501,6 +500,13 @@ function Tools.set_modem(modem, channel)
     debug.debug("Tools modem set to channel " .. bot_channel)
 end
 
+-- Tool Definition: get_time
+-- This function gets the current in-game time.
+function Tools.get_time()
+    local time = textutils.formatTime(os.time(), false)
+    return { success = true, time = time, message = "Current time is " .. time }
+end
+
 -- Tool Definition: change_name
 -- This function changes the bot's name.
 function Tools.change_name(new_name)
@@ -710,12 +716,6 @@ registry.door_control = {
         strict = true
     },
 }
-
--- Tool Definition: get_time
--- This function gets the current in-game time.
-function Tools.get_time()
-    return { time = textutils.formatTime(os.time("ingame"), false) }
-end
 
 -- Function to get all tool schemas to send to the LLM.
 function Tools.get_all_schemas()
@@ -2313,7 +2313,7 @@ return config
 
         print([[
 
-    Installation complete! Build #81 (2025-06-13 21:58:59 UTC)
+    Installation complete! Build #82 (2025-06-14 03:45:55 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
