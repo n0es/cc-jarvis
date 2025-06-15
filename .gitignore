@@ -7,14 +7,42 @@ __pycache__/
 env/
 venv/
 
-# Ignore build artifacts
+# Ignore build artifacts and distribution files
 dist/
+build/
+*.egg-info/
 
-# Ignore local configuration files
+# Ignore local configuration files (but keep examples)
 config.lua
 src/config.lua
 src/config.lua.example
 
-# IDE-specific
+# Ignore debug and log files
+debug.log
+debug_full.json
+debug_request.json
+debug_response.json
+*.log
+
+# Ignore temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# IDE-specific files
 .vscode/
-.idea/ 
+.idea/
+*.swp
+*.swo
+*~
+
+# Node.js (if any JS tooling is added)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Keep important files that should be tracked
+!version.json
+!PROJECT_CLEANUP_PLAN.md 
