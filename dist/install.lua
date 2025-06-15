@@ -1,6 +1,6 @@
 
-    -- Jarvis Installer v1.1.0.7
-    -- Build #7 (2025-06-15 00:44:59 UTC)
+    -- Jarvis Installer v1.1.0.8
+    -- Build #8 (2025-06-15 00:53:19 UTC)
 
     local files = {}
 
@@ -2403,34 +2403,42 @@ function GeminiProvider:convert_messages_to_contents(messages)
         -- Gemini doesn't have a 'system' role. We'll hold onto it and prepend it to the first user message.
         if i == 1 and msg.role == "system" then
             system_prompt_text = msg.content or ""
-        else
-            local new_content = {
-                role = msg.role == "assistant" and "model" or "user",
-                parts = {}
-            }
-            
-            local current_message_text = msg.content or ""
+            goto continue -- Skip to the next message
+        end
+
+        local new_content = {
+            role = msg.role == "assistant" and "model" or "user",
+            parts = {}
+        }
+
+        if msg.role == "tool" then
+            -- This is a tool result message. Gemini calls this 'function' role.
+            new_content.role = "function"
+            table.insert(new_content.parts, {
+                functionResponse = {
+                    name = msg.name, -- This must match the name from the functionCall
+                    response = {
+                        -- Gemini requires the response to be an object. We'll wrap the content.
+                        content = msg.content
+                    }
+                }
+            })
+        else -- Handles 'user' and 'assistant' roles
+            local text_content = msg.content or ""
             
             -- Prepend system prompt to the first actual user message
             if system_prompt_text and new_content.role == "user" then
-                current_message_text = system_prompt_text .. "\n\n" .. current_message_text
+                text_content = system_prompt_text .. "\n\n" .. text_content
                 system_prompt_text = nil -- Clear it so it's only prepended once
             end
 
-            if msg.role == "tool" then
-                -- This is a tool result message. Gemini calls this 'function' role.
-                new_content.role = "function"
-                table.insert(new_content.parts, {
-                    functionResponse = {
-                        name = msg.name, -- This must match the name from the functionCall
-                        response = {
-                            -- Gemini requires the response to be an object. We'll wrap the content.
-                            content = msg.content
-                        }
-                    }
-                })
-            elseif msg.role == "assistant" and msg.tool_calls and #msg.tool_calls > 0 then
-                 -- This is an assistant message that is making a tool call
+            -- Add text part if it exists.
+            if text_content ~= "" then
+                table.insert(new_content.parts, { text = text_content })
+            end
+            
+            -- Add tool call parts if they exist (for assistant messages).
+            if msg.role == "assistant" and msg.tool_calls and #msg.tool_calls > 0 then
                 for _, tool_call in ipairs(msg.tool_calls) do
                     table.insert(new_content.parts, {
                         functionCall = {
@@ -2439,20 +2447,14 @@ function GeminiProvider:convert_messages_to_contents(messages)
                         }
                     })
                 end
-            else
-                -- This is a standard text message (user or simple assistant response)
-                if current_message_text ~= "" then
-                    table.insert(new_content.parts, {
-                        text = current_message_text
-                    })
-                end
-            end
-            
-            -- Only add the content if it has parts. Gemini errors on empty parts.
-            if #new_content.parts > 0 then
-                table.insert(contents, new_content)
             end
         end
+        
+        -- Only add the content if it has parts. Gemini errors on empty parts.
+        if #new_content.parts > 0 then
+            table.insert(contents, new_content)
+        end
+        ::continue::
     end
     
     return contents
@@ -3719,8 +3721,8 @@ return InputValidator
 ]]
 
     local function install()
-        print("Installing Jarvis v1.1.0.7...")
-        print("Build #7 (2025-06-15 00:44:59 UTC)")
+        print("Installing Jarvis v1.1.0.8...")
+        print("Build #8 (2025-06-15 00:53:19 UTC)")
 
         -- Delete the main program file and the library directory to ensure a clean install.
         local program_path = "programs/jarvis"
@@ -3762,7 +3764,7 @@ return InputValidator
 
         local build_file = fs.open(build_info_path, "w")
         if build_file then
-            build_file.write("Jarvis v1.1.0.7 - Build #7 (2025-06-15 00:44:59 UTC)")
+            build_file.write("Jarvis v1.1.0.8 - Build #8 (2025-06-15 00:53:19 UTC)")
             build_file.close()
         end
 
@@ -3770,7 +3772,7 @@ return InputValidator
         local config_path = "/etc/jarvis/config.lua"
         if not fs.exists(config_path) then
             print("Creating placeholder config file at " .. config_path)
-            local config_content = [[-- Configuration for Jarvis v1.1.0.7
+            local config_content = [[-- Configuration for Jarvis v1.1.0.8
 local config = {}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
@@ -3805,7 +3807,7 @@ return config
         local llm_config_path = "/etc/jarvis/llm_config.lua"
         if not fs.exists(llm_config_path) then
             print("Creating default LLM config file at " .. llm_config_path)
-            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.7
+            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.8
 local config = {}
 
 -- Default LLM provider ("openai" or "gemini")
@@ -3867,8 +3869,8 @@ return config
 
         print([[
 
-    Installation complete! Jarvis v1.1.0.7
-    Build #7 (2025-06-15 00:44:59 UTC)
+    Installation complete! Jarvis v1.1.0.8
+    Build #8 (2025-06-15 00:53:19 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys

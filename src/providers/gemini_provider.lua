@@ -57,34 +57,42 @@ function GeminiProvider:convert_messages_to_contents(messages)
         -- Gemini doesn't have a 'system' role. We'll hold onto it and prepend it to the first user message.
         if i == 1 and msg.role == "system" then
             system_prompt_text = msg.content or ""
-        else
-            local new_content = {
-                role = msg.role == "assistant" and "model" or "user",
-                parts = {}
-            }
-            
-            local current_message_text = msg.content or ""
+            goto continue -- Skip to the next message
+        end
+
+        local new_content = {
+            role = msg.role == "assistant" and "model" or "user",
+            parts = {}
+        }
+
+        if msg.role == "tool" then
+            -- This is a tool result message. Gemini calls this 'function' role.
+            new_content.role = "function"
+            table.insert(new_content.parts, {
+                functionResponse = {
+                    name = msg.name, -- This must match the name from the functionCall
+                    response = {
+                        -- Gemini requires the response to be an object. We'll wrap the content.
+                        content = msg.content
+                    }
+                }
+            })
+        else -- Handles 'user' and 'assistant' roles
+            local text_content = msg.content or ""
             
             -- Prepend system prompt to the first actual user message
             if system_prompt_text and new_content.role == "user" then
-                current_message_text = system_prompt_text .. "\n\n" .. current_message_text
+                text_content = system_prompt_text .. "\n\n" .. text_content
                 system_prompt_text = nil -- Clear it so it's only prepended once
             end
 
-            if msg.role == "tool" then
-                -- This is a tool result message. Gemini calls this 'function' role.
-                new_content.role = "function"
-                table.insert(new_content.parts, {
-                    functionResponse = {
-                        name = msg.name, -- This must match the name from the functionCall
-                        response = {
-                            -- Gemini requires the response to be an object. We'll wrap the content.
-                            content = msg.content
-                        }
-                    }
-                })
-            elseif msg.role == "assistant" and msg.tool_calls and #msg.tool_calls > 0 then
-                 -- This is an assistant message that is making a tool call
+            -- Add text part if it exists.
+            if text_content ~= "" then
+                table.insert(new_content.parts, { text = text_content })
+            end
+            
+            -- Add tool call parts if they exist (for assistant messages).
+            if msg.role == "assistant" and msg.tool_calls and #msg.tool_calls > 0 then
                 for _, tool_call in ipairs(msg.tool_calls) do
                     table.insert(new_content.parts, {
                         functionCall = {
@@ -93,20 +101,14 @@ function GeminiProvider:convert_messages_to_contents(messages)
                         }
                     })
                 end
-            else
-                -- This is a standard text message (user or simple assistant response)
-                if current_message_text ~= "" then
-                    table.insert(new_content.parts, {
-                        text = current_message_text
-                    })
-                end
-            end
-            
-            -- Only add the content if it has parts. Gemini errors on empty parts.
-            if #new_content.parts > 0 then
-                table.insert(contents, new_content)
             end
         end
+        
+        -- Only add the content if it has parts. Gemini errors on empty parts.
+        if #new_content.parts > 0 then
+            table.insert(contents, new_content)
+        end
+        ::continue::
     end
     
     return contents
