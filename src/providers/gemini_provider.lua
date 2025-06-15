@@ -366,42 +366,27 @@ function GeminiProvider:process_response(response_data)
     local results = {}
     
     if not response_data or not response_data.candidates or #response_data.candidates == 0 then
-        debug.error("No candidates found in Gemini response")
-        table.insert(results, { type = "error", content = "Invalid response from API" })
-        return results
+        debug.error("Invalid or empty response structure from Gemini API")
+        return { { type = "error", content = "Invalid response from Gemini API" } }
     end
-    
+
     local candidate = response_data.candidates[1]
+    local parts = candidate.content and candidate.content.parts or {}
     
-    if not candidate.content or not candidate.content.parts or #candidate.content.parts == 0 then
-        debug.warn("Candidate content is empty or has no parts")
-        if candidate.finishReason == "SAFETY" then
-            table.insert(results, { type = "message", content = "I cannot respond to that due to safety settings." })
-        else
-            table.insert(results, { type = "message", content = "I received an empty response." })
-        end
-        return results
-    end
-    
-    -- Iterate through all parts of the response
-    for _, part in ipairs(candidate.content.parts) do
+    for _, part in ipairs(parts) do
         if part.text then
             debug.info("Received text part from Gemini")
             table.insert(results, { type = "message", content = part.text })
-        end
-        
-        if part.functionCall then
+        elseif part.functionCall then
             debug.info("Received function call part from Gemini: " .. part.functionCall.name)
-            local args_json = textutils.serializeJSON(part.functionCall.args or {})
-            
             table.insert(results, {
                 type = "tool_call",
                 tool_name = part.functionCall.name,
-                tool_args_json = args_json
+                tool_args_json = textutils.serializeJSON(part.functionCall.args or {})
             })
         end
     end
-    
+
     return results
 end
 

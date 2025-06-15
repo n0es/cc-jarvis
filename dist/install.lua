@@ -1,6 +1,6 @@
 
-    -- Jarvis Installer v1.1.0.5
-    -- Build #5 (2025-06-15 00:28:30 UTC)
+    -- Jarvis Installer v1.1.0.6
+    -- Build #6 (2025-06-15 00:36:19 UTC)
 
     local files = {}
 
@@ -662,9 +662,12 @@ end
 local function execute_tool_call(tool_call, messages_history)
     local tool_name = tool_call.tool_name
     local tool_args_json = tool_call.tool_args_json or "{}"
-    local tool_call_id = "call_" .. os.epoch("utc") .. math.random(1000, 9999)
     
-    debug.info("Executing tool: " .. tool_name)
+    -- Use the ID from the LLM response if available, otherwise generate one.
+    -- This is critical for providers like Gemini that track calls by ID.
+    local tool_call_id = tool_call.id or "call_" .. os.epoch("utc") .. math.random(1000, 9999)
+    
+    debug.info("Executing tool: " .. tool_name .. " (Call ID: " .. tool_call_id .. ")")
     
     -- Get tool function and schema
     local tool_func = tools.get_tool(tool_name)
@@ -679,7 +682,7 @@ local function execute_tool_call(tool_call, messages_history)
         end
     end
     
-    -- Create tool call record
+    -- Create tool call record for the assistant's turn in history
     local tool_call_record = {
         id = tool_call_id,
         type = "function",
@@ -747,10 +750,11 @@ local function execute_tool_call(tool_call, messages_history)
         chatbox_queue.sendMessage(result_text)
     end
     
-    -- Record tool result
+    -- Record tool result in history, referencing the original call ID
     table.insert(messages_history, {
         tool_call_id = tool_call_id,
         role = "tool",
+        name = tool_name, -- Gemini uses 'name' for the function result
         content = result_text
     })
     
@@ -784,7 +788,10 @@ local function process_llm_response(response_parts, messages_history)
             
         elseif part.type == "tool_call" then
             debug.info("Processing tool call: " .. part.tool_name)
+            
+            -- Pass the full tool_call part, which may contain an ID
             local success, tool_call_record = execute_tool_call(part, messages_history)
+            
             table.insert(tool_calls_for_this_turn, tool_call_record)
             
             if not success then
@@ -2705,42 +2712,27 @@ function GeminiProvider:process_response(response_data)
     local results = {}
     
     if not response_data or not response_data.candidates or #response_data.candidates == 0 then
-        debug.error("No candidates found in Gemini response")
-        table.insert(results, { type = "error", content = "Invalid response from API" })
-        return results
+        debug.error("Invalid or empty response structure from Gemini API")
+        return { { type = "error", content = "Invalid response from Gemini API" } }
     end
-    
+
     local candidate = response_data.candidates[1]
+    local parts = candidate.content and candidate.content.parts or {}
     
-    if not candidate.content or not candidate.content.parts or #candidate.content.parts == 0 then
-        debug.warn("Candidate content is empty or has no parts")
-        if candidate.finishReason == "SAFETY" then
-            table.insert(results, { type = "message", content = "I cannot respond to that due to safety settings." })
-        else
-            table.insert(results, { type = "message", content = "I received an empty response." })
-        end
-        return results
-    end
-    
-    -- Iterate through all parts of the response
-    for _, part in ipairs(candidate.content.parts) do
+    for _, part in ipairs(parts) do
         if part.text then
             debug.info("Received text part from Gemini")
             table.insert(results, { type = "message", content = part.text })
-        end
-        
-        if part.functionCall then
+        elseif part.functionCall then
             debug.info("Received function call part from Gemini: " .. part.functionCall.name)
-            local args_json = textutils.serializeJSON(part.functionCall.args or {})
-            
             table.insert(results, {
                 type = "tool_call",
                 tool_name = part.functionCall.name,
-                tool_args_json = args_json
+                tool_args_json = textutils.serializeJSON(part.functionCall.args or {})
             })
         end
     end
-    
+
     return results
 end
 
@@ -3623,7 +3615,7 @@ function InputValidator.validate_api_key(api_key, provider)
     -- Provider-specific validation
     if provider == "openai" then
         rules.min_length = 20
-        -- Allows for 'sk-' and 'sk-proj-' prefixes
+        -- Allows for 'sk-' and 'sk-proj-' prefixes with various characters
         rules.pattern = "^sk-(proj-)?[a-zA-Z0-9_-]+$"
     elseif provider == "gemini" then
         rules.min_length = 30
@@ -3723,8 +3715,8 @@ return InputValidator
 ]]
 
     local function install()
-        print("Installing Jarvis v1.1.0.5...")
-        print("Build #5 (2025-06-15 00:28:30 UTC)")
+        print("Installing Jarvis v1.1.0.6...")
+        print("Build #6 (2025-06-15 00:36:19 UTC)")
 
         -- Delete the main program file and the library directory to ensure a clean install.
         local program_path = "programs/jarvis"
@@ -3766,7 +3758,7 @@ return InputValidator
 
         local build_file = fs.open(build_info_path, "w")
         if build_file then
-            build_file.write("Jarvis v1.1.0.5 - Build #5 (2025-06-15 00:28:30 UTC)")
+            build_file.write("Jarvis v1.1.0.6 - Build #6 (2025-06-15 00:36:19 UTC)")
             build_file.close()
         end
 
@@ -3774,7 +3766,7 @@ return InputValidator
         local config_path = "/etc/jarvis/config.lua"
         if not fs.exists(config_path) then
             print("Creating placeholder config file at " .. config_path)
-            local config_content = [[-- Configuration for Jarvis v1.1.0.5
+            local config_content = [[-- Configuration for Jarvis v1.1.0.6
 local config = {}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
@@ -3809,7 +3801,7 @@ return config
         local llm_config_path = "/etc/jarvis/llm_config.lua"
         if not fs.exists(llm_config_path) then
             print("Creating default LLM config file at " .. llm_config_path)
-            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.5
+            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.6
 local config = {}
 
 -- Default LLM provider ("openai" or "gemini")
@@ -3871,8 +3863,8 @@ return config
 
         print([[
 
-    Installation complete! Jarvis v1.1.0.5
-    Build #5 (2025-06-15 00:28:30 UTC)
+    Installation complete! Jarvis v1.1.0.6
+    Build #6 (2025-06-15 00:36:19 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys

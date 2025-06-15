@@ -377,7 +377,7 @@ function InputValidator.validate_api_key(api_key, provider)
     -- Provider-specific validation
     if provider == "openai" then
         rules.min_length = 20
-        -- Allows for 'sk-' and 'sk-proj-' prefixes
+        -- Allows for 'sk-' and 'sk-proj-' prefixes with various characters
         rules.pattern = "^sk-(proj-)?[a-zA-Z0-9_-]+$"
     elseif provider == "gemini" then
         rules.min_length = 30

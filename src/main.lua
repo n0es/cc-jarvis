@@ -98,9 +98,12 @@ end
 local function execute_tool_call(tool_call, messages_history)
     local tool_name = tool_call.tool_name
     local tool_args_json = tool_call.tool_args_json or "{}"
-    local tool_call_id = "call_" .. os.epoch("utc") .. math.random(1000, 9999)
     
-    debug.info("Executing tool: " .. tool_name)
+    -- Use the ID from the LLM response if available, otherwise generate one.
+    -- This is critical for providers like Gemini that track calls by ID.
+    local tool_call_id = tool_call.id or "call_" .. os.epoch("utc") .. math.random(1000, 9999)
+    
+    debug.info("Executing tool: " .. tool_name .. " (Call ID: " .. tool_call_id .. ")")
     
     -- Get tool function and schema
     local tool_func = tools.get_tool(tool_name)
@@ -115,7 +118,7 @@ local function execute_tool_call(tool_call, messages_history)
         end
     end
     
-    -- Create tool call record
+    -- Create tool call record for the assistant's turn in history
     local tool_call_record = {
         id = tool_call_id,
         type = "function",
@@ -183,10 +186,11 @@ local function execute_tool_call(tool_call, messages_history)
         chatbox_queue.sendMessage(result_text)
     end
     
-    -- Record tool result
+    -- Record tool result in history, referencing the original call ID
     table.insert(messages_history, {
         tool_call_id = tool_call_id,
         role = "tool",
+        name = tool_name, -- Gemini uses 'name' for the function result
         content = result_text
     })
     
@@ -220,7 +224,10 @@ local function process_llm_response(response_parts, messages_history)
             
         elseif part.type == "tool_call" then
             debug.info("Processing tool call: " .. part.tool_name)
+            
+            -- Pass the full tool_call part, which may contain an ID
             local success, tool_call_record = execute_tool_call(part, messages_history)
+            
             table.insert(tool_calls_for_this_turn, tool_call_record)
             
             if not success then
