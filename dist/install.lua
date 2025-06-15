@@ -1,6 +1,6 @@
 
-    -- Jarvis Installer v1.1.0.6
-    -- Build #6 (2025-06-15 00:36:19 UTC)
+    -- Jarvis Installer v1.1.0.7
+    -- Build #7 (2025-06-15 00:44:59 UTC)
 
     local files = {}
 
@@ -2397,82 +2397,65 @@ end
 -- Convert OpenAI-style messages to Gemini contents format
 function GeminiProvider:convert_messages_to_contents(messages)
     local contents = {}
-    local system_instruction = nil
+    local system_prompt_text = nil
 
-    -- First pass to map tool call IDs to function names for Gemini's required format
-    local tool_call_id_to_name = {}
-    for _, message in ipairs(messages) do
-        if message.role == "assistant" and message.tool_calls then
-            for _, tool_call in ipairs(message.tool_calls) do
-                if tool_call.id and tool_call["function"] and tool_call["function"].name then
-                    tool_call_id_to_name[tool_call.id] = tool_call["function"].name
-                end
-            end
-        end
-    end
-
-    for _, message in ipairs(messages) do
-        if message.role == "system" then
-            system_instruction = { parts = { { text = message.content or "" } } }
-
-        elseif message.role == "user" then
-            table.insert(contents, {
-                role = "user",
-                parts = { { text = message.content or "" } }
-            })
+    for i, msg in ipairs(messages) do
+        -- Gemini doesn't have a 'system' role. We'll hold onto it and prepend it to the first user message.
+        if i == 1 and msg.role == "system" then
+            system_prompt_text = msg.content or ""
+        else
+            local new_content = {
+                role = msg.role == "assistant" and "model" or "user",
+                parts = {}
+            }
             
-        elseif message.role == "assistant" then
-            if message.tool_calls and #message.tool_calls > 0 then
-                -- This is a tool-calling turn from the assistant
-                local parts = {}
-                for _, tool_call in ipairs(message.tool_calls) do
-                    if tool_call["function"] then
-                        local func = tool_call["function"]
-                        local args = textutils.unserializeJSON(func.arguments or "{}") or {}
-                        table.insert(parts, {
-                            functionCall = {
-                                name = func.name,
-                                args = args
-                            }
-                        })
-                    end
-                end
-                if #parts > 0 then
-                    table.insert(contents, { role = "model", parts = parts })
-                end
-            elseif message.content and message.content ~= "" then
-                -- This is a standard text response from the assistant
-                table.insert(contents, { role = "model", parts = { { text = message.content } } })
+            local current_message_text = msg.content or ""
+            
+            -- Prepend system prompt to the first actual user message
+            if system_prompt_text and new_content.role == "user" then
+                current_message_text = system_prompt_text .. "\n\n" .. current_message_text
+                system_prompt_text = nil -- Clear it so it's only prepended once
             end
 
-        elseif message.role == "tool" then
-            local func_name = tool_call_id_to_name[message.tool_call_id]
-            if func_name then
-                local response_data = textutils.unserializeJSON(message.content or "")
-                -- Gemini expects the 'response' to be a JSON object.
-                -- If the tool returned a raw string, wrap it in a table.
-                if not response_data then
-                    response_data = { result = message.content or "empty result" }
-                end
-                
-                table.insert(contents, {
-                    role = "tool",
-                    parts = {
-                        {
-                            functionResponse = {
-                                name = func_name,
-                                response = response_data
-                            }
+            if msg.role == "tool" then
+                -- This is a tool result message. Gemini calls this 'function' role.
+                new_content.role = "function"
+                table.insert(new_content.parts, {
+                    functionResponse = {
+                        name = msg.name, -- This must match the name from the functionCall
+                        response = {
+                            -- Gemini requires the response to be an object. We'll wrap the content.
+                            content = msg.content
                         }
                     }
                 })
+            elseif msg.role == "assistant" and msg.tool_calls and #msg.tool_calls > 0 then
+                 -- This is an assistant message that is making a tool call
+                for _, tool_call in ipairs(msg.tool_calls) do
+                    table.insert(new_content.parts, {
+                        functionCall = {
+                            name = tool_call["function"].name,
+                            args = textutils.unserializeJSON(tool_call["function"].arguments or "{}") or {}
+                        }
+                    })
+                end
             else
-                debug.warn("Orphaned tool call response found for ID: " .. tostring(message.tool_call_id))
+                -- This is a standard text message (user or simple assistant response)
+                if current_message_text ~= "" then
+                    table.insert(new_content.parts, {
+                        text = current_message_text
+                    })
+                end
+            end
+            
+            -- Only add the content if it has parts. Gemini errors on empty parts.
+            if #new_content.parts > 0 then
+                table.insert(contents, new_content)
             end
         end
     end
     
-    return contents, system_instruction
+    return contents
 end
 
 -- Convert OpenAI tools to Gemini function declarations
@@ -2543,9 +2526,9 @@ function GeminiProvider:request(api_key, model, messages, tools)
     debug.debug("Headers prepared")
 
     -- Convert messages to Gemini contents format
-    local contents, system_instruction = self:convert_messages_to_contents(messages)
+    local contents = self:convert_messages_to_contents(messages)
     
-    -- Build Gemini request body - match Google's format exactly
+    -- Build the final request body
     local body = {
         contents = contents,
         generationConfig = {
@@ -2555,11 +2538,6 @@ function GeminiProvider:request(api_key, model, messages, tools)
             maxOutputTokens = 8192
         }
     }
-    
-    -- Add system instruction if present
-    if system_instruction then
-        body.systemInstruction = system_instruction
-    end
     
     -- Add function calling support if tools are provided
     local function_declarations = self:convert_tools_to_function_declarations(tools)
@@ -3615,12 +3593,38 @@ function InputValidator.validate_api_key(api_key, provider)
     -- Provider-specific validation
     if provider == "openai" then
         rules.min_length = 20
-        -- Allows for 'sk-' and 'sk-proj-' prefixes with various characters
-        rules.pattern = "^sk-(proj-)?[a-zA-Z0-9_-]+$"
+        rules.custom = function(value)
+            -- OpenAI keys can start with 'sk-' or 'sk-proj-'
+            local starts_with_sk = value:sub(1, 3) == "sk-"
+            local starts_with_sk_proj = value:sub(1, 8) == "sk-proj-"
+
+            if not (starts_with_sk or starts_with_sk_proj) then
+                return "OpenAI key must start with 'sk-' or 'sk-proj-'"
+            end
+
+            -- After prefix, check for invalid characters. Allow alphanumeric, '-', and '_'.
+            local key_body = starts_with_sk_proj and value:sub(9) or value:sub(4)
+            if key_body:match("[^a-zA-Z0-9_%-]") then
+                return "OpenAI key contains invalid characters after prefix"
+            end
+
+            return true
+        end
     elseif provider == "gemini" then
         rules.min_length = 30
-        -- Allows for 'AIzaSy' prefix
-        rules.pattern = "^AIzaSy[a-zA-Z0-9_-]+$"
+        rules.custom = function(value)
+            if value:sub(1, 6) ~= "AIzaSy" then
+                return "Gemini key must start with 'AIzaSy'"
+            end
+
+            -- After prefix, check for invalid characters. Allow alphanumeric, '-', and '_'.
+            local key_body = value:sub(7)
+            if key_body:match("[^a-zA-Z0-9_%-]") then
+                return "Gemini key contains invalid characters after prefix"
+            end
+            
+            return true
+        end
     else
         -- Generic pattern for other potential providers
         rules.pattern = "^[a-zA-Z0-9_.-]+$"
@@ -3715,8 +3719,8 @@ return InputValidator
 ]]
 
     local function install()
-        print("Installing Jarvis v1.1.0.6...")
-        print("Build #6 (2025-06-15 00:36:19 UTC)")
+        print("Installing Jarvis v1.1.0.7...")
+        print("Build #7 (2025-06-15 00:44:59 UTC)")
 
         -- Delete the main program file and the library directory to ensure a clean install.
         local program_path = "programs/jarvis"
@@ -3758,7 +3762,7 @@ return InputValidator
 
         local build_file = fs.open(build_info_path, "w")
         if build_file then
-            build_file.write("Jarvis v1.1.0.6 - Build #6 (2025-06-15 00:36:19 UTC)")
+            build_file.write("Jarvis v1.1.0.7 - Build #7 (2025-06-15 00:44:59 UTC)")
             build_file.close()
         end
 
@@ -3766,7 +3770,7 @@ return InputValidator
         local config_path = "/etc/jarvis/config.lua"
         if not fs.exists(config_path) then
             print("Creating placeholder config file at " .. config_path)
-            local config_content = [[-- Configuration for Jarvis v1.1.0.6
+            local config_content = [[-- Configuration for Jarvis v1.1.0.7
 local config = {}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
@@ -3801,7 +3805,7 @@ return config
         local llm_config_path = "/etc/jarvis/llm_config.lua"
         if not fs.exists(llm_config_path) then
             print("Creating default LLM config file at " .. llm_config_path)
-            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.6
+            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.7
 local config = {}
 
 -- Default LLM provider ("openai" or "gemini")
@@ -3863,8 +3867,8 @@ return config
 
         print([[
 
-    Installation complete! Jarvis v1.1.0.6
-    Build #6 (2025-06-15 00:36:19 UTC)
+    Installation complete! Jarvis v1.1.0.7
+    Build #7 (2025-06-15 00:44:59 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys

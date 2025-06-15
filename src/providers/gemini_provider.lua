@@ -51,82 +51,65 @@ end
 -- Convert OpenAI-style messages to Gemini contents format
 function GeminiProvider:convert_messages_to_contents(messages)
     local contents = {}
-    local system_instruction = nil
+    local system_prompt_text = nil
 
-    -- First pass to map tool call IDs to function names for Gemini's required format
-    local tool_call_id_to_name = {}
-    for _, message in ipairs(messages) do
-        if message.role == "assistant" and message.tool_calls then
-            for _, tool_call in ipairs(message.tool_calls) do
-                if tool_call.id and tool_call["function"] and tool_call["function"].name then
-                    tool_call_id_to_name[tool_call.id] = tool_call["function"].name
-                end
-            end
-        end
-    end
-
-    for _, message in ipairs(messages) do
-        if message.role == "system" then
-            system_instruction = { parts = { { text = message.content or "" } } }
-
-        elseif message.role == "user" then
-            table.insert(contents, {
-                role = "user",
-                parts = { { text = message.content or "" } }
-            })
+    for i, msg in ipairs(messages) do
+        -- Gemini doesn't have a 'system' role. We'll hold onto it and prepend it to the first user message.
+        if i == 1 and msg.role == "system" then
+            system_prompt_text = msg.content or ""
+        else
+            local new_content = {
+                role = msg.role == "assistant" and "model" or "user",
+                parts = {}
+            }
             
-        elseif message.role == "assistant" then
-            if message.tool_calls and #message.tool_calls > 0 then
-                -- This is a tool-calling turn from the assistant
-                local parts = {}
-                for _, tool_call in ipairs(message.tool_calls) do
-                    if tool_call["function"] then
-                        local func = tool_call["function"]
-                        local args = textutils.unserializeJSON(func.arguments or "{}") or {}
-                        table.insert(parts, {
-                            functionCall = {
-                                name = func.name,
-                                args = args
-                            }
-                        })
-                    end
-                end
-                if #parts > 0 then
-                    table.insert(contents, { role = "model", parts = parts })
-                end
-            elseif message.content and message.content ~= "" then
-                -- This is a standard text response from the assistant
-                table.insert(contents, { role = "model", parts = { { text = message.content } } })
+            local current_message_text = msg.content or ""
+            
+            -- Prepend system prompt to the first actual user message
+            if system_prompt_text and new_content.role == "user" then
+                current_message_text = system_prompt_text .. "\n\n" .. current_message_text
+                system_prompt_text = nil -- Clear it so it's only prepended once
             end
 
-        elseif message.role == "tool" then
-            local func_name = tool_call_id_to_name[message.tool_call_id]
-            if func_name then
-                local response_data = textutils.unserializeJSON(message.content or "")
-                -- Gemini expects the 'response' to be a JSON object.
-                -- If the tool returned a raw string, wrap it in a table.
-                if not response_data then
-                    response_data = { result = message.content or "empty result" }
-                end
-                
-                table.insert(contents, {
-                    role = "tool",
-                    parts = {
-                        {
-                            functionResponse = {
-                                name = func_name,
-                                response = response_data
-                            }
+            if msg.role == "tool" then
+                -- This is a tool result message. Gemini calls this 'function' role.
+                new_content.role = "function"
+                table.insert(new_content.parts, {
+                    functionResponse = {
+                        name = msg.name, -- This must match the name from the functionCall
+                        response = {
+                            -- Gemini requires the response to be an object. We'll wrap the content.
+                            content = msg.content
                         }
                     }
                 })
+            elseif msg.role == "assistant" and msg.tool_calls and #msg.tool_calls > 0 then
+                 -- This is an assistant message that is making a tool call
+                for _, tool_call in ipairs(msg.tool_calls) do
+                    table.insert(new_content.parts, {
+                        functionCall = {
+                            name = tool_call["function"].name,
+                            args = textutils.unserializeJSON(tool_call["function"].arguments or "{}") or {}
+                        }
+                    })
+                end
             else
-                debug.warn("Orphaned tool call response found for ID: " .. tostring(message.tool_call_id))
+                -- This is a standard text message (user or simple assistant response)
+                if current_message_text ~= "" then
+                    table.insert(new_content.parts, {
+                        text = current_message_text
+                    })
+                end
+            end
+            
+            -- Only add the content if it has parts. Gemini errors on empty parts.
+            if #new_content.parts > 0 then
+                table.insert(contents, new_content)
             end
         end
     end
     
-    return contents, system_instruction
+    return contents
 end
 
 -- Convert OpenAI tools to Gemini function declarations
@@ -197,9 +180,9 @@ function GeminiProvider:request(api_key, model, messages, tools)
     debug.debug("Headers prepared")
 
     -- Convert messages to Gemini contents format
-    local contents, system_instruction = self:convert_messages_to_contents(messages)
+    local contents = self:convert_messages_to_contents(messages)
     
-    -- Build Gemini request body - match Google's format exactly
+    -- Build the final request body
     local body = {
         contents = contents,
         generationConfig = {
@@ -209,11 +192,6 @@ function GeminiProvider:request(api_key, model, messages, tools)
             maxOutputTokens = 8192
         }
     }
-    
-    -- Add system instruction if present
-    if system_instruction then
-        body.systemInstruction = system_instruction
-    end
     
     -- Add function calling support if tools are provided
     local function_declarations = self:convert_tools_to_function_declarations(tools)

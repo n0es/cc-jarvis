@@ -377,12 +377,38 @@ function InputValidator.validate_api_key(api_key, provider)
     -- Provider-specific validation
     if provider == "openai" then
         rules.min_length = 20
-        -- Allows for 'sk-' and 'sk-proj-' prefixes with various characters
-        rules.pattern = "^sk-(proj-)?[a-zA-Z0-9_-]+$"
+        rules.custom = function(value)
+            -- OpenAI keys can start with 'sk-' or 'sk-proj-'
+            local starts_with_sk = value:sub(1, 3) == "sk-"
+            local starts_with_sk_proj = value:sub(1, 8) == "sk-proj-"
+
+            if not (starts_with_sk or starts_with_sk_proj) then
+                return "OpenAI key must start with 'sk-' or 'sk-proj-'"
+            end
+
+            -- After prefix, check for invalid characters. Allow alphanumeric, '-', and '_'.
+            local key_body = starts_with_sk_proj and value:sub(9) or value:sub(4)
+            if key_body:match("[^a-zA-Z0-9_%-]") then
+                return "OpenAI key contains invalid characters after prefix"
+            end
+
+            return true
+        end
     elseif provider == "gemini" then
         rules.min_length = 30
-        -- Allows for 'AIzaSy' prefix
-        rules.pattern = "^AIzaSy[a-zA-Z0-9_-]+$"
+        rules.custom = function(value)
+            if value:sub(1, 6) ~= "AIzaSy" then
+                return "Gemini key must start with 'AIzaSy'"
+            end
+
+            -- After prefix, check for invalid characters. Allow alphanumeric, '-', and '_'.
+            local key_body = value:sub(7)
+            if key_body:match("[^a-zA-Z0-9_%-]") then
+                return "Gemini key contains invalid characters after prefix"
+            end
+            
+            return true
+        end
     else
         -- Generic pattern for other potential providers
         rules.pattern = "^[a-zA-Z0-9_.-]+$"
