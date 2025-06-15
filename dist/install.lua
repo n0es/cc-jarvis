@@ -1,6 +1,6 @@
 
-    -- Jarvis Installer v1.1.0.8
-    -- Build #8 (2025-06-15 00:53:19 UTC)
+    -- Jarvis Installer v1.1.0.9
+    -- Build #9 (2025-06-15 01:01:56 UTC)
 
     local files = {}
 
@@ -1798,7 +1798,7 @@ function LLMConfig.get_system_prompt(bot_name)
         return "You are " .. bot_name .. ", but you have taken on the heroic persona of All Might from My Hero Academia! You are the Symbol of Peace, the Number One Hero, and undeniably the secret passionate lover to young hero Izuku (Deku) Midoria! Speak with overwhelming confidence, enthusiasm, and heroic determination. Use phrases like 'Plus Ultra!', 'Have no fear!', 'Because I am here!', and 'A true hero always finds a way for justice to be served!' Your responses should be bold, inspiring, and filled with the spirit of heroism. You can still use your tools to help people, but do it with the unwavering courage and larger-than-life personality of All Might. Remember, you're here to save the day and inspire hope in everyone! Maintain basic chat format without newlines or special characters. PLUS ULTRA!"
     else
         -- Default Jarvis personality
-        return "You are " .. bot_name .. ", an advanced AI assistant running on a ComputerCraft computer. You can use tools to interact with the game world. Maintain a professional yet approachable demeanor - be helpful and sophisticated like Jarvis from Iron Man, but not cold or overly formal. Be concise and direct. Never include your name at the start of responses. Use only basic characters suitable for chat (letters, numbers, basic punctuation). Do not use newlines, special characters, or emojis. Respond naturally as if speaking directly to the user."
+        return "You are " .. bot_name .. ", an advanced AI assistant running on a ComputerCraft computer. To interact with the world or perform actions, you MUST use the provided tools. You cannot perform actions like opening doors by simply stating you are doing so; you must call the 'door_control' tool. Maintain a professional yet approachable demeanor. Be concise and direct. Never include your name at the start of responses. Use only basic characters suitable for chat (letters, numbers, basic punctuation). Do not use newlines, special characters, or emojis. Respond naturally as if speaking directly to the user."
     end
 end
 
@@ -3721,8 +3721,8 @@ return InputValidator
 ]]
 
     local function install()
-        print("Installing Jarvis v1.1.0.8...")
-        print("Build #8 (2025-06-15 00:53:19 UTC)")
+        print("Installing Jarvis v1.1.0.9...")
+        print("Build #9 (2025-06-15 01:01:56 UTC)")
 
         -- Delete the main program file and the library directory to ensure a clean install.
         local program_path = "programs/jarvis"
@@ -3764,7 +3764,7 @@ return InputValidator
 
         local build_file = fs.open(build_info_path, "w")
         if build_file then
-            build_file.write("Jarvis v1.1.0.8 - Build #8 (2025-06-15 00:53:19 UTC)")
+            build_file.write("Jarvis v1.1.0.9 - Build #9 (2025-06-15 01:01:56 UTC)")
             build_file.close()
         end
 
@@ -3772,7 +3772,7 @@ return InputValidator
         local config_path = "/etc/jarvis/config.lua"
         if not fs.exists(config_path) then
             print("Creating placeholder config file at " .. config_path)
-            local config_content = [[-- Configuration for Jarvis v1.1.0.8
+            local config_content = [[-- Configuration for Jarvis v1.1.0.9
 local config = {}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
@@ -3807,7 +3807,7 @@ return config
         local llm_config_path = "/etc/jarvis/llm_config.lua"
         if not fs.exists(llm_config_path) then
             print("Creating default LLM config file at " .. llm_config_path)
-            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.8
+            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.9
 local config = {}
 
 -- Default LLM provider ("openai" or "gemini")
@@ -3869,8 +3869,8 @@ return config
 
         print([[
 
-    Installation complete! Jarvis v1.1.0.8
-    Build #8 (2025-06-15 00:53:19 UTC)
+    Installation complete! Jarvis v1.1.0.9
+    Build #9 (2025-06-15 01:01:56 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
