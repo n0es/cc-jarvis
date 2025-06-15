@@ -314,10 +314,10 @@ registry.door_control = {
                 action = {
                     type = "string",
                     description = "The action to perform: 'open' or 'close'",
-                    enum = ["open", "close"]
+                    enum = {"open", "close"}
                 }
             },
-            required = ["action"]
+            required = {"action"}
         },
         strict = true
     },
@@ -338,7 +338,7 @@ registry.get_config = {
                     description = "Configuration path (e.g., 'llm.provider', 'core.bot_name'). Leave empty to see all config."
                 }
             },
-            required = []
+            required = {}
         },
         strict = true
     },

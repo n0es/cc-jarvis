@@ -8,7 +8,7 @@ import json
 # The directory containing the source Lua files.
 SRC_DIR = 'src'
 # The directory for library files on the ComputerCraft computer.
-LIB_DIR_ON_CC = 'programs/lib/jarvis'
+LIB_DIR_ON_CC = 'lib/jarvis'
 # The directory for program files on the ComputerCraft computer.
 PROGRAMS_DIR_ON_CC = 'programs'
 # The main program file in SRC_DIR. This will be placed in PROGRAMS_DIR_ON_CC.
