@@ -1,6 +1,6 @@
 
-    -- Jarvis Installer v1.1.0.3
-    -- Build #3 (2025-06-15 00:16:28 UTC)
+    -- Jarvis Installer v1.1.0.4
+    -- Build #4 (2025-06-15 00:21:19 UTC)
 
     local files = {}
 
@@ -253,6 +253,38 @@ function Debug.mask_api_key(api_key)
     else
         return "Invalid or too short"
     end
+end
+
+-- Function to get last N lines from a file
+local function get_last_lines(filepath, num_lines)
+    if not fs.exists(filepath) then
+        return "Log file not found at " .. filepath
+    end
+    
+    local file, err = fs.open(filepath, "r")
+    if not file then
+        return "Could not open log file: " .. tostring(err)
+    end
+    
+    local lines = {}
+    for line in file.readAll():gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+    file.close()
+    
+    local start_index = math.max(1, #lines - num_lines + 1)
+    local recent_lines = {}
+    for i = start_index, #lines do
+        table.insert(recent_lines, lines[i])
+    end
+    
+    return table.concat(recent_lines, "\n")
+end
+
+-- Get recent log entries
+function Debug.get_recent_logs(num_lines)
+    num_lines = num_lines or 20
+    return get_last_lines(DEBUG_FILE, num_lines)
 end
 
 -- Clear all debug files
@@ -540,6 +572,7 @@ local chatbox_queue = require("lib.jarvis.chatbox_queue")
 local debug = require("lib.jarvis.debug")
 local UnifiedConfig = require("lib.jarvis.config.unified_config")
 local InputValidator = require("lib.jarvis.utils.input_validator")
+local ErrorReporter = require("lib.jarvis.utils.error_reporter")
 
 -- Application state
 local AppState = {
@@ -952,7 +985,7 @@ local function main_loop()
         end
         
         -- Process chat queue
-        chatbox_queue.process(AppState.chatBox)
+        chatbox_queue.process()
         
         -- Small delay to prevent excessive CPU usage
         sleep(0.1)
@@ -994,12 +1027,26 @@ end
 local ok, err = pcall(main)
 
 if not ok then
+    local stack_trace = debug.traceback()
     debug.error("A critical error occurred: " .. tostring(err))
-    
+
+    -- Generate the error report
+    local report_ok, report_msg = ErrorReporter.generate({
+        reason = "A critical error forced the program to shut down.",
+        error = err,
+        stack_trace = stack_trace,
+        app_state = AppState
+    })
+
     -- Attempt to send error message to chat
     if AppState.chatBox then
         pcall(function() 
             AppState.chatBox.send("I've encountered a critical error and need to shut down.")
+            if report_ok then
+                 AppState.chatBox.send("An error report was saved successfully.")
+            else
+                 AppState.chatBox.send("I failed to save an error report.")
+            end
         end)
     end
     
@@ -1007,6 +1054,11 @@ if not ok then
     pcall(cleanup)
     
     printError("Critical error: " .. tostring(err))
+    if report_ok then
+        print(report_msg)
+    else
+        printError(report_msg)
+    end
 else
     -- Normal shutdown
     pcall(cleanup)
@@ -1105,6 +1157,7 @@ local Tools = {}
 local debug = require("lib.jarvis.debug")
 local UnifiedConfig = require("lib.jarvis.config.unified_config")
 local InputValidator = require("lib.jarvis.utils.input_validator")
+local ErrorReporter = require("lib.jarvis.utils.error_reporter")
 
 -- A registry to hold the function definitions and their callable implementations.
 local registry = {}
@@ -1326,6 +1379,27 @@ function Tools.get_config(args)
     end
 end
 
+-- Tool Definition: report_bug
+-- This function manually generates an error report.
+function Tools.report_bug(args)
+    local description = args and args.description or "User-initiated bug report"
+    
+    debug.info("User is generating a manual bug report.")
+    
+    -- For a manual report, we don't have the full app state, but we can gather what's available.
+    local report_ok, report_msg = ErrorReporter.generate({
+        reason = "Manual bug report requested by user.",
+        error = description,
+        stack_trace = "N/A (manual report)"
+    })
+    
+    if report_ok then
+        return { success = true, message = "Successfully generated bug report. " .. report_msg }
+    else
+        return { success = false, message = "Failed to generate bug report: " .. report_msg }
+    end
+end
+
 -- Register the get_time tool
 registry.get_time = {
     func = Tools.get_time,
@@ -1439,6 +1513,27 @@ registry.get_config = {
                 }
             },
             required = {}
+        },
+        strict = true
+    },
+}
+
+-- Register the report_bug tool
+registry.report_bug = {
+    func = Tools.report_bug,
+    schema = {
+        type = "function",
+        name = "report_bug",
+        description = "Generate a debug report file if the assistant is behaving unexpectedly but hasn't crashed.",
+        parameters = {
+            type = "object",
+            properties = {
+                description = {
+                    type = "string",
+                    description = "A brief description of the problem you are observing."
+                }
+            },
+            required = {"description"}
         },
         strict = true
     },
@@ -3020,6 +3115,134 @@ end
 
 return ProviderFactory
 ]]
+files["programs/lib/jarvis/utils/error_reporter.lua"] = [[
+-- error_reporter.lua
+-- Generates a comprehensive error report for debugging.
+
+local ErrorReporter = {}
+local debug = require("lib.jarvis.debug")
+local UnifiedConfig = require("lib.jarvis.config.unified_config")
+
+local REPORT_FILE = "error_report.txt"
+
+-- Gathers system information
+local function get_system_info()
+    local info = {
+        os_version = os.version(),
+        computercraft_version = _HOST or "Unknown",
+        uptime_seconds = os.clock(),
+        peripherals = {}
+    }
+    pcall(function()
+        for _, side in ipairs(rs.getSides()) do
+            info.peripherals[side] = peripheral.getType(side)
+        end
+    end)
+    return info
+end
+
+-- Formats a section for the report
+local function format_section(title, content)
+    local lines = {
+        "\n=======================================================================",
+        "== " .. title,
+        "=======================================================================\n\n"
+    }
+    if type(content) == "table" then
+        for k, v in pairs(content) do
+            table.insert(lines, string.format("%-20s: %s", tostring(k), tostring(v)))
+        end
+    elseif type(content) == "string" then
+        table.insert(lines, content)
+    end
+    table.insert(lines, "\n")
+    return table.concat(lines, "\n")
+end
+
+-- Generates the error report
+function ErrorReporter.generate(context)
+    context = context or {}
+    local error_message = context.error or "No error message provided"
+    local stack_trace = context.stack_trace or debug.traceback()
+    local app_state = context.app_state or {}
+
+    debug.error("Generating error report for: " .. tostring(error_message))
+
+    -- 1. Version and Timestamp
+    local version = UnifiedConfig.get("core.version") or "unknown"
+    local build_info = "Jarvis v" .. version
+    local report_header = {
+        title = "Jarvis AI Assistant - Error Report",
+        timestamp_utc = os.date("!%Y-%m-%d %H:%M:%S"),
+        version = build_info,
+        reason = context.reason or "An unexpected error occurred."
+    }
+
+    -- 2. Error Details
+    local error_details = string.format("Error: %s\n\nStack Trace:\n%s", tostring(error_message), tostring(stack_trace))
+
+    -- 3. Configuration (masked)
+    local masked_config = UnifiedConfig.get_all()
+    if masked_config.api then
+        if masked_config.api.openai_key then
+            masked_config.api.openai_key = debug.mask_api_key(masked_config.api.openai_key)
+        end
+        if masked_config.api.gemini_key then
+            masked_config.api.gemini_key = debug.mask_api_key(masked_config.api.gemini_key)
+        end
+    end
+    local config_text = textutils.serialize(masked_config)
+
+    -- 4. Message History
+    local message_history_text
+    if app_state.messages and #app_state.messages > 0 then
+        local history_lines = {}
+        for i, msg in ipairs(app_state.messages) do
+            local content_preview = debug.preview(tostring(textutils.serialize(msg.content or "")), 150)
+            local role = msg.role or "unknown"
+            table.insert(history_lines, string.format("[%d] Role: %-10s Content: %s", i, role, content_preview))
+        end
+        message_history_text = table.concat(history_lines, "\n")
+    else
+        message_history_text = "Message history is not available or empty."
+    end
+
+    -- 5. Recent Logs
+    local recent_logs = debug.get_recent_logs(50) -- Get last 50 log lines
+
+    -- 6. System Info
+    local system_info_table = get_system_info()
+
+    -- Assemble the report
+    local report_content = {
+        format_section("Report Details", report_header),
+        format_section("Error Details", error_details),
+        format_section("Configuration (Masked)", config_text),
+        format_section("Message History", message_history_text),
+        format_section("Recent Logs (from debug.log)", recent_logs),
+        format_section("System Status", system_info_table)
+    }
+
+    -- Write report to file
+    local data_dir = UnifiedConfig.get("core.data_dir") or "/etc/jarvis"
+    local report_path = data_dir .. "/" .. REPORT_FILE
+    local file, err = fs.open(report_path, "w")
+    if not file then
+        debug.error("Failed to write error report: " .. tostring(err))
+        return false, "Failed to write report file."
+    end
+
+    file.write(table.concat(report_content))
+    file.close()
+
+    local success_message = "An error report has been saved to " .. report_path
+    debug.info(success_message)
+
+    return true, success_message
+end
+
+return ErrorReporter 
+]]
 files["programs/lib/jarvis/utils/input_validator.lua"] = [[
 -- input_validator.lua
 -- Comprehensive input validation module for Jarvis
@@ -3494,8 +3717,8 @@ return InputValidator
 ]]
 
     local function install()
-        print("Installing Jarvis v1.1.0.3...")
-        print("Build #3 (2025-06-15 00:16:28 UTC)")
+        print("Installing Jarvis v1.1.0.4...")
+        print("Build #4 (2025-06-15 00:21:19 UTC)")
 
         -- Delete the main program file and the library directory to ensure a clean install.
         local program_path = "programs/jarvis"
@@ -3537,7 +3760,7 @@ return InputValidator
 
         local build_file = fs.open(build_info_path, "w")
         if build_file then
-            build_file.write("Jarvis v1.1.0.3 - Build #3 (2025-06-15 00:16:28 UTC)")
+            build_file.write("Jarvis v1.1.0.4 - Build #4 (2025-06-15 00:21:19 UTC)")
             build_file.close()
         end
 
@@ -3545,7 +3768,7 @@ return InputValidator
         local config_path = "/etc/jarvis/config.lua"
         if not fs.exists(config_path) then
             print("Creating placeholder config file at " .. config_path)
-            local config_content = [[-- Configuration for Jarvis v1.1.0.3
+            local config_content = [[-- Configuration for Jarvis v1.1.0.4
 local config = {}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
@@ -3580,7 +3803,7 @@ return config
         local llm_config_path = "/etc/jarvis/llm_config.lua"
         if not fs.exists(llm_config_path) then
             print("Creating default LLM config file at " .. llm_config_path)
-            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.3
+            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.4
 local config = {}
 
 -- Default LLM provider ("openai" or "gemini")
@@ -3642,8 +3865,8 @@ return config
 
         print([[
 
-    Installation complete! Jarvis v1.1.0.3
-    Build #3 (2025-06-15 00:16:28 UTC)
+    Installation complete! Jarvis v1.1.0.4
+    Build #4 (2025-06-15 00:21:19 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys

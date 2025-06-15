@@ -5,6 +5,7 @@ local Tools = {}
 local debug = require("lib.jarvis.debug")
 local UnifiedConfig = require("lib.jarvis.config.unified_config")
 local InputValidator = require("lib.jarvis.utils.input_validator")
+local ErrorReporter = require("lib.jarvis.utils.error_reporter")
 
 -- A registry to hold the function definitions and their callable implementations.
 local registry = {}
@@ -226,6 +227,27 @@ function Tools.get_config(args)
     end
 end
 
+-- Tool Definition: report_bug
+-- This function manually generates an error report.
+function Tools.report_bug(args)
+    local description = args and args.description or "User-initiated bug report"
+    
+    debug.info("User is generating a manual bug report.")
+    
+    -- For a manual report, we don't have the full app state, but we can gather what's available.
+    local report_ok, report_msg = ErrorReporter.generate({
+        reason = "Manual bug report requested by user.",
+        error = description,
+        stack_trace = "N/A (manual report)"
+    })
+    
+    if report_ok then
+        return { success = true, message = "Successfully generated bug report. " .. report_msg }
+    else
+        return { success = false, message = "Failed to generate bug report: " .. report_msg }
+    end
+end
+
 -- Register the get_time tool
 registry.get_time = {
     func = Tools.get_time,
@@ -339,6 +361,27 @@ registry.get_config = {
                 }
             },
             required = {}
+        },
+        strict = true
+    },
+}
+
+-- Register the report_bug tool
+registry.report_bug = {
+    func = Tools.report_bug,
+    schema = {
+        type = "function",
+        name = "report_bug",
+        description = "Generate a debug report file if the assistant is behaving unexpectedly but hasn't crashed.",
+        parameters = {
+            type = "object",
+            properties = {
+                description = {
+                    type = "string",
+                    description = "A brief description of the problem you are observing."
+                }
+            },
+            required = {"description"}
         },
         strict = true
     },

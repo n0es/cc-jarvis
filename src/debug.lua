@@ -148,6 +148,38 @@ function Debug.mask_api_key(api_key)
     end
 end
 
+-- Function to get last N lines from a file
+local function get_last_lines(filepath, num_lines)
+    if not fs.exists(filepath) then
+        return "Log file not found at " .. filepath
+    end
+    
+    local file, err = fs.open(filepath, "r")
+    if not file then
+        return "Could not open log file: " .. tostring(err)
+    end
+    
+    local lines = {}
+    for line in file.readAll():gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+    file.close()
+    
+    local start_index = math.max(1, #lines - num_lines + 1)
+    local recent_lines = {}
+    for i = start_index, #lines do
+        table.insert(recent_lines, lines[i])
+    end
+    
+    return table.concat(recent_lines, "\n")
+end
+
+-- Get recent log entries
+function Debug.get_recent_logs(num_lines)
+    num_lines = num_lines or 20
+    return get_last_lines(DEBUG_FILE, num_lines)
+end
+
 -- Clear all debug files
 function Debug.clear_logs()
     local files = {DEBUG_FILE, DEBUG_JSON_FILE, REQUEST_FILE, RESPONSE_FILE}

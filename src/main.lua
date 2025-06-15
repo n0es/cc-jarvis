@@ -8,6 +8,7 @@ local chatbox_queue = require("lib.jarvis.chatbox_queue")
 local debug = require("lib.jarvis.debug")
 local UnifiedConfig = require("lib.jarvis.config.unified_config")
 local InputValidator = require("lib.jarvis.utils.input_validator")
+local ErrorReporter = require("lib.jarvis.utils.error_reporter")
 
 -- Application state
 local AppState = {
@@ -420,7 +421,7 @@ local function main_loop()
         end
         
         -- Process chat queue
-        chatbox_queue.process(AppState.chatBox)
+        chatbox_queue.process()
         
         -- Small delay to prevent excessive CPU usage
         sleep(0.1)
@@ -462,12 +463,26 @@ end
 local ok, err = pcall(main)
 
 if not ok then
+    local stack_trace = debug.traceback()
     debug.error("A critical error occurred: " .. tostring(err))
-    
+
+    -- Generate the error report
+    local report_ok, report_msg = ErrorReporter.generate({
+        reason = "A critical error forced the program to shut down.",
+        error = err,
+        stack_trace = stack_trace,
+        app_state = AppState
+    })
+
     -- Attempt to send error message to chat
     if AppState.chatBox then
         pcall(function() 
             AppState.chatBox.send("I've encountered a critical error and need to shut down.")
+            if report_ok then
+                 AppState.chatBox.send("An error report was saved successfully.")
+            else
+                 AppState.chatBox.send("I failed to save an error report.")
+            end
         end)
     end
     
@@ -475,6 +490,11 @@ if not ok then
     pcall(cleanup)
     
     printError("Critical error: " .. tostring(err))
+    if report_ok then
+        print(report_msg)
+    else
+        printError(report_msg)
+    end
 else
     -- Normal shutdown
     pcall(cleanup)
