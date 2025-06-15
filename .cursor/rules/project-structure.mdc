@@ -1,0 +1,37 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Jarvis Project Structure Guide
+
+This document outlines the architecture and key components of the Jarvis ComputerCraft AI Assistant project.
+
+## Core Logic & Entrypoint
+
+The main application logic is in the `src/` directory.
+- The primary entry point for the application is [`src/main.lua`](mdc:src/main.lua). It orchestrates the initialization, event loop, and error handling.
+- The build process is managed by [`build.py`](mdc:build.py), which packages all the Lua files into a distributable installer.
+
+## Configuration
+
+The project uses a unified configuration system to manage all settings.
+- The core of this system is [`src/config/unified_config.lua`](mdc:src/config/unified_config.lua). It handles loading, validation, and migration of legacy settings.
+
+## Key Modules & Utilities
+
+- **Tool System**: The extensible tool system is defined in [`src/tools.lua`](mdc:src/tools.lua). This file registers all functions the LLM can call and manages their schemas.
+- **Input Validation**: All external data is validated and sanitized by [`src/utils/input_validator.lua`](mdc:src/utils/input_validator.lua).
+- **Error Reporting**: The automatic and manual error reporting feature is handled by [`src/utils/error_reporter.lua`](mdc:src/utils/error_reporter.lua).
+- **LLM Abstraction**: The main LLM provider logic is in [`src/llm.lua`](mdc:src/llm.lua), which delegates to specific providers in `src/providers/`.
+- **Project Documentation**: The main user-facing documentation is in [`README.md`](mdc:README.md).
+
+## Directory Structure
+
+- `src/`: Contains all Lua source code.
+- `src/providers/`: Houses the specific implementations for different LLM providers (e.g., OpenAI, Gemini).
+- `src/config/`: Contains configuration-related modules.
+- `src/utils/`: Contains helper modules like the input validator and error reporter.
+- `dist/`: Contains the distributable build artifacts, including the `install.lua` script.
+- `.github/workflows/`: Contains the CI/CD pipeline for automated builds.
+- `.cursor/rules/`: Contains Cursor AI rules for codebase understanding.
