@@ -1,11 +1,11 @@
 
-    -- Jarvis Installer v1.1.0.2
-    -- Build #2 (2025-06-15 00:01:45 UTC)
+    -- Jarvis Installer v1.1.0.3
+    -- Build #3 (2025-06-15 00:16:28 UTC)
 
     local files = {}
 
     -- Packed files will be inserted here by the build script.
-    files["lib/jarvis/chatbox_queue.lua"] = [[
+    files["programs/lib/jarvis/chatbox_queue.lua"] = [[
 -- ChatBox Queue Module
 -- Manages message sending with a queue to prevent rapid message issues
 
@@ -104,7 +104,7 @@ chatbox_queue.chat = chat
 
 return chatbox_queue 
 ]]
-files["lib/jarvis/debug.lua"] = [[
+files["programs/lib/jarvis/debug.lua"] = [[
 -- debug.lua
 -- Debug logging module for structured logging to files and console
 
@@ -279,7 +279,7 @@ end
 
 return Debug 
 ]]
-files["lib/jarvis/debug_api_keys.lua"] = [[
+files["programs/lib/jarvis/debug_api_keys.lua"] = [[
 -- debug_api_keys.lua
 -- Debug script to check API key selection and provider detection
 
@@ -332,7 +332,7 @@ print("1. Make sure your main config is saved properly")
 print("2. Restart Jarvis to reload configs")
 print("3. If still broken, the helper function in main.lua needs fixing") 
 ]]
-files["lib/jarvis/llm.lua"] = [[
+files["programs/lib/jarvis/llm.lua"] = [[
 -- llm.lua
 -- Handles communication with LLM APIs using a provider abstraction layer.
 
@@ -1012,7 +1012,7 @@ else
     pcall(cleanup)
 end 
 ]]
-files["lib/jarvis/test_providers.lua"] = [=[
+files["programs/lib/jarvis/test_providers.lua"] = [=[
 -- test_providers.lua
 -- Test script for the LLM provider abstraction system
 
@@ -1097,7 +1097,7 @@ else
 end
 --]] 
 ]=]
-files["lib/jarvis/tools.lua"] = [[
+files["programs/lib/jarvis/tools.lua"] = [[
 -- tools.lua
 -- Defines the functions that the LLM can call.
 
@@ -1508,7 +1508,7 @@ end
 
 return Tools 
 ]]
-files["lib/jarvis/config/llm_config.lua"] = [[
+files["programs/lib/jarvis/config/llm_config.lua"] = [[
 -- llm_config.lua
 -- Configuration management for LLM providers
 
@@ -1730,7 +1730,7 @@ LLMConfig.load_config()
 
 return LLMConfig 
 ]]
-files["lib/jarvis/config/unified_config.lua"] = [=[
+files["programs/lib/jarvis/config/unified_config.lua"] = [=[
 -- unified_config.lua
 -- Unified configuration management system for Jarvis
 -- Consolidates all configuration sources into a single, validated interface
@@ -2156,7 +2156,7 @@ end
 
 return UnifiedConfig
 ]=]
-files["lib/jarvis/providers/base_provider.lua"] = [[
+files["programs/lib/jarvis/providers/base_provider.lua"] = [[
 -- base_provider.lua
 -- Base interface for LLM providers
 
@@ -2241,7 +2241,7 @@ end
 
 return BaseProvider 
 ]]
-files["lib/jarvis/providers/gemini_provider.lua"] = [[
+files["programs/lib/jarvis/providers/gemini_provider.lua"] = [[
 -- gemini_provider.lua
 -- Google Gemini API provider implementation
 
@@ -2651,7 +2651,7 @@ end
 
 return GeminiProvider 
 ]]
-files["lib/jarvis/providers/openai_provider.lua"] = [[
+files["programs/lib/jarvis/providers/openai_provider.lua"] = [[
 -- openai_provider.lua
 -- OpenAI API provider implementation
 
@@ -2953,7 +2953,7 @@ end
 
 return OpenAIProvider 
 ]]
-files["lib/jarvis/providers/provider_factory.lua"] = [[
+files["programs/lib/jarvis/providers/provider_factory.lua"] = [[
 -- provider_factory.lua
 -- Factory for creating and managing LLM providers
 
@@ -3020,7 +3020,7 @@ end
 
 return ProviderFactory
 ]]
-files["lib/jarvis/utils/input_validator.lua"] = [[
+files["programs/lib/jarvis/utils/input_validator.lua"] = [[
 -- input_validator.lua
 -- Comprehensive input validation module for Jarvis
 -- Provides standardized validation for all user inputs and API parameters
@@ -3494,12 +3494,12 @@ return InputValidator
 ]]
 
     local function install()
-        print("Installing Jarvis v1.1.0.2...")
-        print("Build #2 (2025-06-15 00:01:45 UTC)")
+        print("Installing Jarvis v1.1.0.3...")
+        print("Build #3 (2025-06-15 00:16:28 UTC)")
 
         -- Delete the main program file and the library directory to ensure a clean install.
         local program_path = "programs/jarvis"
-        local lib_path = "lib/jarvis"
+        local lib_path = "programs/lib/jarvis"
 
         print("Removing old version if it exists...")
         if fs.exists(program_path) then
@@ -3537,7 +3537,7 @@ return InputValidator
 
         local build_file = fs.open(build_info_path, "w")
         if build_file then
-            build_file.write("Jarvis v1.1.0.2 - Build #2 (2025-06-15 00:01:45 UTC)")
+            build_file.write("Jarvis v1.1.0.3 - Build #3 (2025-06-15 00:16:28 UTC)")
             build_file.close()
         end
 
@@ -3545,7 +3545,7 @@ return InputValidator
         local config_path = "/etc/jarvis/config.lua"
         if not fs.exists(config_path) then
             print("Creating placeholder config file at " .. config_path)
-            local config_content = [[-- Configuration for Jarvis v1.1.0.2
+            local config_content = [[-- Configuration for Jarvis v1.1.0.3
 local config = {}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
@@ -3580,7 +3580,7 @@ return config
         local llm_config_path = "/etc/jarvis/llm_config.lua"
         if not fs.exists(llm_config_path) then
             print("Creating default LLM config file at " .. llm_config_path)
-            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.2
+            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.3
 local config = {}
 
 -- Default LLM provider ("openai" or "gemini")
@@ -3642,8 +3642,8 @@ return config
 
         print([[
 
-    Installation complete! Jarvis v1.1.0.2
-    Build #2 (2025-06-15 00:01:45 UTC)
+    Installation complete! Jarvis v1.1.0.3
+    Build #3 (2025-06-15 00:16:28 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys
