@@ -1,6 +1,6 @@
 
-    -- Jarvis Installer v1.1.0.4
-    -- Build #4 (2025-06-15 00:21:19 UTC)
+    -- Jarvis Installer v1.1.0.5
+    -- Build #5 (2025-06-15 00:28:30 UTC)
 
     local files = {}
 
@@ -3518,13 +3518,15 @@ function InputValidator.validate_object(object, schema)
     
     -- Validate each field in the schema
     for field_name, field_rules in pairs(schema) do
-        local field_value = object[field_name]
-        local valid, result = InputValidator.validate_value(field_value, field_rules, field_name)
-        
-        if valid then
-            validated_object[field_name] = result
-        else
-            table.insert(errors, result)
+        if field_name ~= "_strict" then
+            local field_value = object[field_name]
+            local valid, result = InputValidator.validate_value(field_value, field_rules, field_name)
+            
+            if valid then
+                validated_object[field_name] = result
+            else
+                table.insert(errors, result)
+            end
         end
     end
     
@@ -3614,18 +3616,22 @@ function InputValidator.validate_api_key(api_key, provider)
         required = true,
         type = "string",
         min_length = 8,
-        max_length = 200,
-        pattern = "api_key",
+        max_length = 256, -- Increased max length
         sanitize = {"trim"}
     }
     
     -- Provider-specific validation
     if provider == "openai" then
-        rules.min_length = 40
-        rules.pattern = "^sk%-[a-zA-Z0-9]{40,}$"
-    elseif provider == "gemini" then
         rules.min_length = 20
-        rules.pattern = "^[a-zA-Z0-9_%-]{20,}$"
+        -- Allows for 'sk-' and 'sk-proj-' prefixes
+        rules.pattern = "^sk-(proj-)?[a-zA-Z0-9_-]+$"
+    elseif provider == "gemini" then
+        rules.min_length = 30
+        -- Allows for 'AIzaSy' prefix
+        rules.pattern = "^AIzaSy[a-zA-Z0-9_-]+$"
+    else
+        -- Generic pattern for other potential providers
+        rules.pattern = "^[a-zA-Z0-9_.-]+$"
     end
     
     return InputValidator.validate_value(api_key, rules, "api_key")
@@ -3717,8 +3723,8 @@ return InputValidator
 ]]
 
     local function install()
-        print("Installing Jarvis v1.1.0.4...")
-        print("Build #4 (2025-06-15 00:21:19 UTC)")
+        print("Installing Jarvis v1.1.0.5...")
+        print("Build #5 (2025-06-15 00:28:30 UTC)")
 
         -- Delete the main program file and the library directory to ensure a clean install.
         local program_path = "programs/jarvis"
@@ -3760,7 +3766,7 @@ return InputValidator
 
         local build_file = fs.open(build_info_path, "w")
         if build_file then
-            build_file.write("Jarvis v1.1.0.4 - Build #4 (2025-06-15 00:21:19 UTC)")
+            build_file.write("Jarvis v1.1.0.5 - Build #5 (2025-06-15 00:28:30 UTC)")
             build_file.close()
         end
 
@@ -3768,7 +3774,7 @@ return InputValidator
         local config_path = "/etc/jarvis/config.lua"
         if not fs.exists(config_path) then
             print("Creating placeholder config file at " .. config_path)
-            local config_content = [[-- Configuration for Jarvis v1.1.0.4
+            local config_content = [[-- Configuration for Jarvis v1.1.0.5
 local config = {}
 
 -- Your OpenAI API key from https://platform.openai.com/api-keys
@@ -3803,7 +3809,7 @@ return config
         local llm_config_path = "/etc/jarvis/llm_config.lua"
         if not fs.exists(llm_config_path) then
             print("Creating default LLM config file at " .. llm_config_path)
-            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.4
+            local llm_config_content = [[-- LLM Configuration for Jarvis v1.1.0.5
 local config = {}
 
 -- Default LLM provider ("openai" or "gemini")
@@ -3865,8 +3871,8 @@ return config
 
         print([[
 
-    Installation complete! Jarvis v1.1.0.4
-    Build #4 (2025-06-15 00:21:19 UTC)
+    Installation complete! Jarvis v1.1.0.5
+    Build #5 (2025-06-15 00:28:30 UTC)
 
     IMPORTANT: Edit /etc/jarvis/config.lua and add your API keys:
     - OpenAI API key: https://platform.openai.com/api-keys

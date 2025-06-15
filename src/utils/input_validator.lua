@@ -272,13 +272,15 @@ function InputValidator.validate_object(object, schema)
     
     -- Validate each field in the schema
     for field_name, field_rules in pairs(schema) do
-        local field_value = object[field_name]
-        local valid, result = InputValidator.validate_value(field_value, field_rules, field_name)
-        
-        if valid then
-            validated_object[field_name] = result
-        else
-            table.insert(errors, result)
+        if field_name ~= "_strict" then
+            local field_value = object[field_name]
+            local valid, result = InputValidator.validate_value(field_value, field_rules, field_name)
+            
+            if valid then
+                validated_object[field_name] = result
+            else
+                table.insert(errors, result)
+            end
         end
     end
     
@@ -368,18 +370,22 @@ function InputValidator.validate_api_key(api_key, provider)
         required = true,
         type = "string",
         min_length = 8,
-        max_length = 200,
-        pattern = "api_key",
+        max_length = 256, -- Increased max length
         sanitize = {"trim"}
     }
     
     -- Provider-specific validation
     if provider == "openai" then
-        rules.min_length = 40
-        rules.pattern = "^sk%-[a-zA-Z0-9]{40,}$"
-    elseif provider == "gemini" then
         rules.min_length = 20
-        rules.pattern = "^[a-zA-Z0-9_%-]{20,}$"
+        -- Allows for 'sk-' and 'sk-proj-' prefixes
+        rules.pattern = "^sk-(proj-)?[a-zA-Z0-9_-]+$"
+    elseif provider == "gemini" then
+        rules.min_length = 30
+        -- Allows for 'AIzaSy' prefix
+        rules.pattern = "^AIzaSy[a-zA-Z0-9_-]+$"
+    else
+        -- Generic pattern for other potential providers
+        rules.pattern = "^[a-zA-Z0-9_.-]+$"
     end
     
     return InputValidator.validate_value(api_key, rules, "api_key")
